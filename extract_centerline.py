@@ -58,8 +58,10 @@ input_file = os.path.join(og_dir, "no_collaterals_reindexed.vtp")
 cell_data_array = "ModelFaceID" 
 
 # IDs de SimVascular (Inlets y Outlets correspondientes)
-inlet_ids = [12, 16, 20] 
-outlet_ids = [19, 15, 21]
+#inlet_ids = [12, 16, 20, 19, 22] 
+#outlet_ids = [19, 15, 21, 23, 17]
+inlet_ids = [14] 
+outlet_ids = [22]
 
 # Cargar la malla original una sola vez
 reader = vtk.vtkXMLPolyDataReader()
@@ -110,40 +112,3 @@ for i in range(len(inlet_ids)):
         print(f"[RECONSTRUIDO] Objeto creado desde cero en {fixed_temp_out}")
 
 
-def analyze_new_vtp_connectivity(file_list):
-    print(f"{'Archivo':<30} | {'Extremos (1)':<12} | {'Pasos (2)':<12} | {'Junc. (3+)'}")
-    print("-" * 75)
-    
-    for f_path in file_list:
-        f_name = os.path.basename(f_path)
-        
-        # Cargar el VTP recién creado
-        reader = vtk.vtkXMLPolyDataReader()
-        reader.SetFileName(f_path)
-        reader.Update()
-        poly = reader.GetOutput()
-        
-        point_cells = vtk.vtkIdList()
-        conn_counts = {1: 0, 2: 0, "3+": 0}
-        
-        for i in range(poly.GetNumberOfPoints()):
-            poly.GetPointCells(i, point_cells)
-            n = point_cells.GetNumberOfIds()
-            
-            if n == 1:
-                conn_counts[1] += 1
-            elif n == 2:
-                conn_counts[2] += 1
-            elif n >= 3:
-                conn_counts["3+"] += 1
-        
-        print(f"{f_name[:30]:<30} | {conn_counts[1]:<12} | {conn_counts[2]:<12} | {conn_counts['3+']}")
-
-# Configuración de rutas
-
-new_temp_files = glob.glob(os.path.join(save_file, "fixed_tmp_cl_*.vtp"))
-
-if not new_temp_files:
-    print("No se encontraron archivos tmp_cl_*.vtp en la carpeta.")
-else:
-    analyze_new_vtp_connectivity(new_temp_files)

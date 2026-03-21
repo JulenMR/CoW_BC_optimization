@@ -5,13 +5,13 @@ from collections import defaultdict
 
 # --- CONFIGURACIÓN ---
 path_base = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models/Centerlines"
-output_file = os.path.join(path_base, "cow_final_segmented_perfect.vtp")
+output_file = os.path.join(path_base, "cow_full_final.vtp")
 files = glob.glob(os.path.join(path_base, "fixed_tmp_cl_*"))
 
 if not files:
     print("No se encontraron archivos."); exit()
 
-# 1. FASE DE UNIFICACIÓN (Append + Clean + Stripper)
+# 1. Phase of merging (Append + Clean + Stripper)
 # ---------------------------------------------------------
 append_filter = vtk.vtkAppendPolyData()
 for f in files:
@@ -20,14 +20,14 @@ for f in files:
     append_filter.AddInputData(reader.GetOutput())
 append_filter.Update()
 
-# Soldadura inicial (Tolerancia 0.035 para cerrar huecos entre archivos)
+# Cleaner Fuses points that are within a range 
 cleaner = vtk.vtkCleanPolyData()
 cleaner.SetInputData(append_filter.GetOutput())
-cleaner.SetTolerance(0.035) 
+cleaner.SetTolerance(0.02) 
 cleaner.PointMergingOn()
 cleaner.Update()
 
-# Stripper: Fundamental para organizar los puntos en polilíneas coherentes
+# Stripper: Combines simple lines defined by 2 points into a polyline
 stripper = vtk.vtkStripper()
 stripper.SetInputData(cleaner.GetOutput())
 stripper.JoinContiguousSegmentsOn()
@@ -36,11 +36,12 @@ stripper.Update()
 poly_prepared = stripper.GetOutput()
 poly_prepared.BuildLinks()
 
-# 2. FASE TOPOLÓGICA (Mapa de conectividad y Bifurcaciones)
+# 2. Topological phase (Connectivity map and bifurcations)
 # ---------------------------------------------------------
 unique_segments = set()
 node_connectivity = defaultdict(int)
 
+# Bifurcations are identified as nodes with various polylines 
 for i in range(poly_prepared.GetNumberOfCells()):
     ids = poly_prepared.GetCell(i).GetPointIds()
     for j in range(ids.GetNumberOfIds() - 1):
@@ -52,9 +53,9 @@ for i in range(poly_prepared.GetNumberOfCells()):
             node_connectivity[p2] += 1
 
 bifurcations = {pid for pid, count in node_connectivity.items() if count >= 3}
-print(f"Bifurcaciones detectadas: {len(bifurcations)}")
+print(f"Number of bifurcations: {len(bifurcations)}")
 
-# 3. FASE DE SEGMENTACIÓN (Corte estricto en Junctions)
+# 3. Segmentation phase (Cutting polyline at Junctions)
 # ---------------------------------------------------------
 segmented_cells = [] # Lista temporal para guardar las listas de IDs
 
@@ -72,7 +73,7 @@ for i in range(poly_prepared.GetNumberOfCells()):
     if len(current_branch) > 1:
         segmented_cells.append(list(current_branch))
 
-# 4. FASE DE PURGA (Eliminar líneas duplicadas o triplicadas)
+# 4. Cleaning phase. Delete duplicated polylines
 # ---------------------------------------------------------
 final_cell_array = vtk.vtkCellArray()
 seen_signatures = set()
@@ -92,7 +93,7 @@ for branch_pts in segmented_cells:
     else:
         count_removed += 1
 
-# 5. ENSAMBLAJE FINAL Y METADATOS
+# 5. FInal ensambling
 # ---------------------------------------------------------
 final_net = vtk.vtkPolyData()
 final_net.SetPoints(poly_prepared.GetPoints())

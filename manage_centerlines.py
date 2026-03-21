@@ -1,82 +1,100 @@
-import numpy as np
 import vtk
-from vtkmodules.util.numpy_support import vtk_to_numpy
+import numpy as np
+import os
+from collections import defaultdict
 
+# --- CONFIGURACIÓN ---
+file_vtp = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models/Centerlines/cow_full_final.vtp"
+file_out = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models/Centerlines/solver_input.in"
 
-import pyvista as pv
+# Parámetros físicos por defecto (ajustar según tu caso)
+DENSITY = 1.06       # g/cm^3 (Sangre)
+VISCOSITY = 0.04     # poise (g/cm*s)
+MAT_E = 4.0e6        # Módulo de Young (dynes/cm^2)
+MAT_HU = 0.1         # Espesor relativo de pared (h/R)
 
-file = "/home/julenmr/Documents/CMU/Automatic_BC/CoW_Centerline_Data/cow_graphs/topcow_ct_001.vtp"
-# Cargamos el grafo de TopCoW
-mesh = pv.read(file)
+# 1. CARGAR DATOS
+reader = vtk.vtkXMLPolyDataReader()
+reader.SetFileName(file_vtp)
+reader.Update()
+poly = reader.GetOutput()
 
-# Encontramos puntos que son compartidos por más de 2 líneas (Bifurcaciones)
-# Analizamos la conectividad de las celdas
-def find_junctions(mesh):
-    junction_nodes = []
-    for i in range(mesh.n_points):
-        # Buscamos cuántas líneas (cells) usan este punto
-        connected_cells = mesh.extract_points([i]).n_cells
-        if connected_cells > 2:
-            junction_nodes.append(i)
-    return junction_nodes
+radius_array = poly.GetPointData().GetArray("MaximumInscribedSphereRadius")
+node_type_array = poly.GetPointData().GetArray("NodeType")
 
+# 2. MAPEAR NODOS ÚNICOS
+# Necesitamos identificar qué puntos físicos son extremos o junctions
+node_coords = {}
+for i in range(poly.GetNumberOfPoints()):
+    if node_type_array.GetTuple1(i) != 2: # 1 (extremo) o 3+ (junction)
+        node_coords[i] = poly.GetPoint(i)
 
-junctions = find_junctions(mesh)
-print(f"Nodos para las líneas JUNCTION en el script 1D: {junctions}")
+# 3. EXTRAER SEGMENTOS (Ramas)
+segments = []
+joint_map = defaultdict(list) # Para saber qué ramas entran/salen de cada nodo
 
-print("# NODOS DE JUNCTIONS")
-for j_id in junctions:
-    point = mesh.points[j_id]
-    # point[0] es X, point[1] es Y, point[2] es Z
-    print(f"NODE {j_id} {point[0]:.6f} {point[1]:.6f} {point[2]:.6f}")
-
-def write_1d_input(output_path, model_name, points, r_start, r_end, inflow_data, rcr_values, n_timesteps, timestep_size, save_every):
-    # Nodes
-    inlet_node = points[0]
-    outlet_node = points[-1]
+for i in range(poly.GetNumberOfCells()):
+    cell = poly.GetCell(i)
+    ids = cell.GetPointIds()
+    n_pts = ids.GetNumberOfIds()
     
-    nodes_txt = f"NODE 0 {inlet_node[0]:.6f} {inlet_node[1]:.6f} {inlet_node[2]:.6f}\n"
-    nodes_txt += f"NODE 1 {outlet_node[0]:.6f} {outlet_node[1]:.6f} {outlet_node[2]:.6f}\n"
+    id_start = ids.GetId(0)
+    id_end = ids.GetId(n_pts - 1)
     
-    # Calculate vessel length
-    diffs = np.diff(points, axis=0)
-    segments = np.linalg.norm(diffs, axis=1)
-    total_length = np.sum(segments)
+    # Calcular longitud real sumando distancias entre puntos
+    length = 0.0
+    radii = []
+    for j in range(n_pts - 1):
+        p1 = np.array(poly.GetPoint(ids.GetId(j)))
+        p2 = np.array(poly.GetPoint(ids.GetId(j+1)))
+        length += np.linalg.norm(p1 - p2)
+        radii.append(radius_array.GetTuple1(ids.GetId(j)))
+    radii.append(radius_array.GetTuple1(ids.GetId(n_pts-1)))
     
-    # Area
-    area_in = np.pi * (r_start**2)
-    area_out = np.pi * (r_end**2)
+    avg_radius = np.mean(radii)
     
-    # Number of elements
-    n_elements = max(20, int(total_length * 1.2))
-    # Create a segment
-    segments_txt = f"SEGMENT seg_0 0 {total_length:.6f} {n_elements} 0 1 {area_in:.6f} {area_out:.6f} 0.0 MAT1 NONE 0.0 0 0 RCR RCR_0\n"
+    seg_name = f"Branch_{i}"
+    segments.append({
+        'name': seg_name,
+        'node_in': id_start,
+        'node_out': id_end,
+        'L': length,
+        'R': avg_radius
+    })
+    
+    # Registrar conectividad para los JOINTS
+    joint_map[id_start].append({'name': seg_name, 'type': 'OUT'})
+    joint_map[id_end].append({'name': seg_name, 'type': 'IN'})
 
-    # Generate template
-    full_content = f"""# 1D Simplified Model
-MODEL {model_name}
+# 4. ESCRIBIR ARCHIVO .IN PARA SIMVASCULAR
+with open(file_out, 'w') as f:
+    f.write("# --- SimVascular 1D Solver Input File ---\n\n")
+    
+    # BLOQUE DE NODOS
+    for nid, coords in node_coords.items():
+        f.write(f"NODE {nid} {coords[0]:.6f} {coords[1]:.6f} {coords[2]:.6f}\n")
+    
+    f.write("\n")
 
-{nodes_txt}
+    # BLOQUE DE SEGMENTOS
+    # Formato: SEGMENT name id L num_points node_in node_out R_in R_out mat_id ...
+    for i, s in enumerate(segments):
+        f.write(f"SEGMENT {s['name']} {i} {s['L']:.4f} 2 {s['node_in']} {s['node_out']} {s['R']:.4f} {s['R']:.4f} 0\n")
+    
+    f.write("\n")
+    
+    # BLOQUE DE MATERIAL (ID 0 por defecto)
+    f.write(f"MATERIAL MAT0 RIGID {DENSITY} {VISCOSITY}\n\n")
 
-{segments_txt}
-
-DATATABLE RCR_0 LIST
-0.0 {rcr_values[0]}
-0.0 {rcr_values[1]}
-0.0 {rcr_values[2]}
-0.0 0.0
-ENDDATATABLE
-
-DATATABLE INFLOW LIST
-{inflow_data}
-ENDDATATABLE
-
-SOLVEROPTIONS {timestep_size} {save_every} {n_timesteps} 2 INFLOW FLOW 1.0e-5 1 1
-MATERIAL MAT1 LINEAR 1.06 0.04 0.0 1.0 1.0e7 0.0 0.0
-OUTPUT TEXT
-"""
-    path_1d = os.path.join(output_path, "ROM_1d")
-    os.makedirs(path_1d, exist_ok=True)
-    with open(os.path.join(path_1d, f"{model_name}.in"), "w") as f:
-        f.write(full_content)
+    # BLOQUE DE UNIONES (JOINTS)
+    # Solo para puntos donde conectan más de una rama o terminales
+    for nid, conns in joint_map.items():
+        in_segs = [c['name'] for c in conns if c['type'] == 'IN']
+        out_segs = [c['name'] for c in conns if c['type'] == 'OUT']
         
+        # En SV 1D, un JOINT conecta entradas con salidas
+        f.write(f"JOINT J_{nid} {nid}\n")
+        if in_segs: f.write(f"  IN {' '.join(in_segs)}\n")
+        if out_segs: f.write(f"  OUT {' '.join(out_segs)}\n")
+
+print(f"Archivo SV 1D generado con éxito en: {file_out}")
