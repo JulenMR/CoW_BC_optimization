@@ -8,6 +8,7 @@ og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/3
 input_file = os.path.join(og_dir, "no_collaterals.vtp")
 output_file = os.path.join(og_dir,"no_collaterals_reindexed.vtp")
 array_name = "ModelFaceID"
+escala_factor = 0.1  # Factor para pasar de mm (x10) a cm (x1)
 
 # 1. Leer el archivo
 reader = vtk.vtkXMLPolyDataReader()
@@ -15,17 +16,49 @@ reader.SetFileName(input_file)
 reader.Update()
 polydata = reader.GetOutput()
 
-# 2. Obtener el array de IDs original
+# --- NUEVA FASE: ESCALADO ---
+print(f"--- Aplicando factor de escala: {escala_factor} ---")
+
+# A. Escalar la geometría (puntos X, Y, Z)
+transform = vtk.vtkTransform()
+transform.Scale(escala_factor, escala_factor, escala_factor)
+
+transformFilter = vtk.vtkTransformPolyDataFilter()
+transformFilter.SetInputData(polydata)
+transformFilter.SetTransform(transform)
+transformFilter.Update()
+
+polydata = transformFilter.GetOutput()
+
+# B. Escalar arrays de Radio (si existen en el PointData)
+# VMTK y SimVascular suelen usar estos nombres
+nombres_radios = ["Radius", "MaximumInscribedSphereRadius"]
+for nombre in nombres_radios:
+    radio_array = polydata.GetPointData().GetArray(nombre)
+    if radio_array:
+        print(f"Escalando valores del array: {nombre}")
+        # Convertimos a numpy para operar rápido y devolvemos a VTK
+        np_radio = numpy_support.vtk_to_numpy(radio_array)
+        np_radio *= escala_factor
+        # Actualizamos el array original
+        for i in range(len(np_radio)):
+            radio_array.SetTuple1(i, np_radio[i])
+
+# --- CONTINUACIÓN: REINDEXACIÓN DE IDs ---
+
+# 2. Obtener el array de IDs original (de la malla ya escalada)
 cell_data = polydata.GetCellData().GetArray(array_name)
+if not cell_data:
+    print(f"Error: No se encontró el array {array_name}")
+    exit()
+
 ids_originales = numpy_support.vtk_to_numpy(cell_data)
 
-# 3. Encontrar IDs únicos existentes (excluyendo los vacíos como 12 y 21)
-# Esto detectará automáticamente qué números tienen celdas asociadas
+# 3. Encontrar IDs únicos existentes
 unique_ids = sorted(np.unique(ids_originales))
 print(f"IDs detectados en el modelo original: {unique_ids}")
 
 # 4. Crear el mapeo: {ID_viejo: ID_nuevo}
-# Si quieres que empiecen en 1 y lleguen al 23 (si hay 23 reales)
 mapping = {old_id: i + 1 for i, old_id in enumerate(unique_ids)}
 
 # 5. Crear el nuevo array de IDs
@@ -37,10 +70,12 @@ new_array.SetName(array_name)
 polydata.GetCellData().RemoveArray(array_name)
 polydata.GetCellData().AddArray(new_array)
 
+# Guardar el archivo final (Escalado + Reindexado)
 writer = vtk.vtkXMLPolyDataWriter()
 writer.SetFileName(output_file)
 writer.SetInputData(polydata)
 writer.Write()
 
-print(f"\n¡Reindexación completada!")
-print(f"El nuevo archivo '{output_file}' ahora tiene IDs del 1 al {len(unique_ids)} sin huecos.")
+print(f"\n¡Proceso completado!")
+print(f"Modelo escalado por {escala_factor}")
+print(f"IDs reindexados del 1 al {len(unique_ids)} en '{output_file}'")
