@@ -46,18 +46,18 @@ def plot_custom_0d_results(df):
 
     # 2. Plotear Presión de Salida (pressure_out) para los dos últimos
     if not b0.empty:
-        plt.plot(b0['time'], b0['pressure_out'], label='Presión Salida Rama 0', linewidth=2)
+        plt.plot(b0['time'], b0['pressure_out']/1333.3, label='Presión Salida Rama 0', linewidth=2)
     if not b2.empty:
-        plt.plot(b2['time'], b2['pressure_out'], label='Presión Salida Rama 2', linewidth=2)
+        plt.plot(b2['time'], b2['pressure_out']/1333.3, label='Presión Salida Rama 2', linewidth=2)
     
     # 3. Opcional: Presión de Entrada en el tronco para ver la caída total
     if not b1.empty:
-        plt.plot(b1['time'], b1['pressure_in'], '--', label='Presión Entrada Tronco (b1)', alpha=0.6)
+        plt.plot(b1['time'], b1['pressure_in']/1333.3, '--', label='Presión Entrada Tronco (b1)', alpha=0.6)
 
     # Configuración estética
     plt.title('Presión en los Segmentos de Salida de la Bifurcación')
     plt.xlabel('Tiempo (s)')
-    plt.ylabel('Presión (Baryes)') # Recuerda: mmHg = Baryes / 1333.2
+    plt.ylabel('Presión (mmHg)') # Recuerda: mmHg = Baryes / 1333.2
     plt.grid(True, which='both', linestyle='--', alpha=0.5)
     plt.legend()
     

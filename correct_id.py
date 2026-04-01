@@ -2,7 +2,10 @@ import vtk
 from vtk.util import numpy_support
 import numpy as np
 import os
+import pandas as pd
 
+
+"""
 # --- CONFIGURACIÓN ---
 og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models"
 input_file = os.path.join(og_dir, "no_collaterals.vtp")
@@ -79,3 +82,20 @@ writer.Write()
 print(f"\n¡Proceso completado!")
 print(f"Modelo escalado por {escala_factor}")
 print(f"IDs reindexados del 1 al {len(unique_ids)} en '{output_file}'")
+"""
+my_xml = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models/no_collaterals.mdl"
+df = pd.read_xml(my_xml, xpath=".//face")
+
+face_mapping = dict(zip(df['name'],df['id']))
+
+for key, value in face_mapping.items():
+    print(f"{key}: {value}")
+
+cap_names = ["cap_Right_Post", "cap_Right_SCA", "cap_Right_Anterior"]
+ids = []
+for cap in cap_names:
+    ids.append(face_mapping[cap])
+
+
+print(ids)
+

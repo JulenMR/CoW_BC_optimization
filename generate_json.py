@@ -4,6 +4,15 @@ import numpy as np
 import json
 import os
 from collections import deque, defaultdict
+import networkx as nx
+import matplotlib.pyplot as plt
+
+
+def read_flow_file(path):
+    if path and os.path.exists(path):
+        data = np.loadtxt(path)
+        return {"t": data[:, 0].tolist(), "Q": data[:, 1].tolist()}
+    return {"t": [0.0, 1.0], "Q": [0.5, 0.5]}
 
 def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_values=None):
     """
@@ -18,18 +27,12 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
     print(f"PROCESSING MULTI-INLET MODEL: {os.path.basename(vtp_path)}")
     print("="*40)
 
-    def read_flow_file(path):
-        if path and os.path.exists(path):
-            data = np.loadtxt(path)
-            return {"t": data[:, 0].tolist(), "Q": data[:, 1].tolist()}
-        return {"t": [0.0, 1.0], "Q": [0.5, 0.5]} # Default fallback
-
     reader = vtk.vtkXMLPolyDataReader()
     reader.SetFileName(vtp_path)
     reader.Update()
     polydata = reader.GetOutput()
 
-    # --- PHASE 1: EXTRACTION ---
+    # PHASE 1: EXTRACTION 
     branch_ids = numpy_support.vtk_to_numpy(polydata.GetCellData().GetArray("BranchID"))
     usage_tags = numpy_support.vtk_to_numpy(polydata.GetPointData().GetArray("UsageTag"))
     radii = numpy_support.vtk_to_numpy(polydata.GetPointData().GetArray("MaximumInscribedSphereRadius"))
@@ -45,44 +48,49 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
             next_node_id += 1
         return pos_to_node[key]
 
-    raw_branches = {}
-    node_to_branches = defaultdict(list)
+    raw_branches = {} # Information about the branch
+    node_to_branches = defaultdict(list) # Information about the connectivity
     inlet_nodes, outlet_nodes = set(), set()
 
-    for i in range(polydata.GetNumberOfCells()):
+    for i in range(polydata.GetNumberOfCells()): # Iterate through each branch
         cell = polydata.GetCell(i)
         b_id = int(branch_ids[i])
-        pt_ids = [cell.GetPointId(j) for j in range(cell.GetNumberOfPoints())]
-        n_start, n_end = get_node(pt_ids[0]), get_node(pt_ids[-1])
-        raw_branches[b_id] = {'nodes': [n_start, n_end], 'pts': pt_ids, 'oriented': False}
+        pt_ids = [cell.GetPointId(j) for j in range(cell.GetNumberOfPoints())] # Get all the points
+        n_start, n_end = get_node(pt_ids[0]), get_node(pt_ids[-1]) # Select first and last point from the branch
+        raw_branches[b_id] = {'nodes': [n_start, n_end], 'pts': pt_ids, 'oriented': False} 
         node_to_branches[n_start].append(b_id)
         node_to_branches[n_end].append(b_id)
-        for p_id in pt_ids:
+        for p_id in [pt_ids[0], pt_ids[-1]]:
             tag = int(usage_tags[p_id])
-            if tag == 1: inlet_nodes.add(get_node(p_id))
-            elif tag == 2: outlet_nodes.add(get_node(p_id))
+            if tag == 1: inlet_nodes.add(get_node(p_id)) # Save inlets
+            elif tag == 2: outlet_nodes.add(get_node(p_id)) # Save outlets
 
-    # --- PHASE 2: ORIENTATION ---
+    for i, inlet in enumerate(inlet_nodes):
+        print(f"Inlet {i}: {inlet}") 
+    for i, outlet in enumerate(outlet_nodes):
+        print(f"Outlet {i}: {outlet}") 
+
+    # PHASE 2: ORIENTATION with Breadth First Search algorithm
     final_segments = {}
-    queue = deque(list(inlet_nodes))
+    queue = deque(list(inlet_nodes)) # The BFS starts with inlets in the queue
     while queue:
-        curr_node = queue.popleft()
-        for b_id in node_to_branches[curr_node]:
+        curr_node = queue.popleft() # Gets the first node from the queue
+        for b_id in node_to_branches[curr_node]: # Iterates for each branch connected to that node
             br = raw_branches[b_id]
-            if not br['oriented']:
-                n_in = curr_node
-                n_out = br['nodes'][1] if br['nodes'][0] == curr_node else br['nodes'][0]
+            if not br['oriented']: # If it has not been oriented already
+                n_in = curr_node # Takes the current node as inlet
+                n_out = br['nodes'][1] if br['nodes'][0] == curr_node else br['nodes'][0] # Takes the other node as outlet
                 coords_pts = [np.array(polydata.GetPoint(p)) for p in br['pts']]
-                length = sum(np.linalg.norm(coords_pts[j+1] - coords_pts[j]) for j in range(len(coords_pts)-1))
-                final_segments[b_id] = {
-                    'n_in': n_in, 'n_out': n_out, 'length': float(length), 
+                length = sum(np.linalg.norm(coords_pts[j+1] - coords_pts[j]) for j in range(len(coords_pts)-1)) 
+                final_segments[b_id] = { # Saves information for each  segment
+                    'n_in': n_in, 'n_out': n_out, 'length': float(length), # start/end node, radius, length 
                     'radius': float(radii[br['pts'][0]]),
-                    'is_inlet': n_in in inlet_nodes, 'is_outlet': n_out in outlet_nodes
+                    'is_inlet': n_in in inlet_nodes, 'is_outlet': n_out in outlet_nodes # checks if the nodes are inlet or outlet
                 }
-                br['oriented'] = True
-                queue.append(n_out)
+                br['oriented'] = True # Sets that branch as oriented
+                queue.append(n_out) # Adds the outlet node to the queue
 
-    # --- PHASE 3: JSON ASSEMBLY ---
+    # PHASE 3: JSON ASSEMBLY
     model_0d = {
         "simulation_parameters": {
             "number_of_cardiac_cycles": 1,
@@ -96,12 +104,12 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
 
     junction_data = defaultdict(lambda: {"in": [], "out": []})
 
-    for b_id, data in final_segments.items():
+    for b_id, data in final_segments.items(): # Iterates every branch
         vessel = {
             "vessel_id": b_id, "vessel_name": f"branch{b_id}",
             "vessel_length": data['length'], "zero_d_element_type": "BloodVessel",
-            "zero_d_element_values": {
-                "R_poiseuille": (8.0 * 0.04 * data['length']) / (np.pi * data['radius']**4),
+            "zero_d_element_values": { # Applies Poiseuilles laws to get R, C, L
+                "R_poiseuille": (8.0 * 0.04 * data['length']) / (np.pi * data['radius']**4), 
                 "L": (1.06 * data['length']) / (np.pi * data['radius']**2),
                 "C": (3.0 * data['length'] * np.pi * data['radius']**3) / (2.0 * 0.05 * 1e6),
                 "stenosis_coefficient": 0.0
@@ -109,21 +117,20 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
             "boundary_conditions": {}
         }
 
-        if data['is_inlet']:
+        if data['is_inlet']: # If the branch has an inlet sets INFLOW
             bc_name = f"INLET_{b_id}"
-            vessel["boundary_conditions"]["inlet"] = bc_name
+            vessel["boundary_conditions"]["inlet"] = bc_name # Adds BC name to the specific vessel
             
-            # Look up specific flow file for this branch
-            f_path = flow_files.get(b_id) if flow_files else None
+            f_path = flow_files.get(b_id) if flow_files else None # Gets the flow file from the key (b_id) of the flow dictionary
             model_0d["boundary_conditions"].append({
                 "bc_name": bc_name, "bc_type": "FLOW", 
                 "bc_values": read_flow_file(f_path)
             })
             print(f"   Inlet {b_id}: Assigned flow from {os.path.basename(f_path) if f_path else 'default'}")
         else:
-            junction_data[data['n_in']]["out"].append(b_id)
+            junction_data[data['n_in']]["out"].append(b_id) # Saves the b_id as an end of its starting node
 
-        if data['is_outlet']:
+        if data['is_outlet']: # If the branch has an outlet sets RCR
             bc_name = f"RCR_{b_id}"
             vessel["boundary_conditions"]["outlet"] = bc_name
             vals = rcr_values.get(b_id, [1000.0, 1e-6, 5000.0]) if rcr_values else [1000.0, 1e-6, 5000.0]
@@ -132,11 +139,10 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
                 "bc_values": {"Rp": vals[0], "C": vals[1], "Rd": vals[2], "Pd": 0.0}
             })
         else:
-            junction_data[data['n_out']]["in"].append(b_id)
+            junction_data[data['n_out']]["in"].append(b_id) # Saves the b_id as a start of its ending node
 
         model_0d["vessels"].append(vessel)
 
-    # (Junction generation)
     for n_id, paths in junction_data.items():
         if paths["in"] or paths["out"]:
             model_0d["junctions"].append({
@@ -147,24 +153,54 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
     with open(output_path, 'w') as f:
         json.dump(model_0d, f, indent=4)
     print(f"\nCOMPLETED. Multi-inlet JSON saved: {output_path}")
+    return final_segments, pos_to_node, inlet_nodes, outlet_nodes
 
-# --- EXAMPLE USAGE ---
-my_flows = {
-    6: "carotid_left.flow",
-    1: "carotid_right.flow",
-    17: "vertebral_left.flow",
-    11: "vertebral_right.flow"
-}
+def visualize_graph(final_segments, pos_to_node, inlet_nodes, outlet_nodes):
+    G = nx.DiGraph() # create directed graph
+    
+    # 2. Invertir pos_to_node para obtener coordenadas desde el ID del nodo
+    # pos_to_node tiene {(x, y, z): id}, queremos {id: (x, y)}
+    node_to_pos = {v: (k[0], k[1]) for k, v in pos_to_node.items()} 
 
-my_rcrs = {
-    0: [1000.0, 1e-6, 5000.0],
-    15: [1100.0, 1e-6, 5500.0]
-    # ... add all 8 outlets
-}
+    # 3. Añadir aristas y nodos
+    for b_id, data in final_segments.items():
+        G.add_edge(data['n_in'], data['n_out'], id=b_id)
 
-# generate_0d_json_multi_inlet(vtp_input, json_output, flow_files=my_flows, rcr_values=my_rcrs)
+    # 4. Definir colores de los nodos
+    node_colors = []
+    for node in G.nodes():
+        if node in inlet_nodes:
+            node_colors.append('lightgreen')  # Inlets en Verde
+        elif node in outlet_nodes:
+            node_colors.append('salmon')      # Outlets en Rojo/Salmón
+        else:
+            node_colors.append('skyblue')     # Junctions en Azul
 
-# --- Ejecución ---
+    # 5. Dibujar
+    plt.figure(figsize=(10, 10))
+    
+    # Dibujamos usando node_to_pos como el layout real
+    nx.draw_networkx_nodes(G, node_to_pos, node_size=300, node_color=node_colors, edgecolors='black')
+    
+    # Dibujamos las arterias con flechas
+    nx.draw_networkx_edges(G, node_to_pos, arrowstyle='->', arrowsize=15, 
+                           edge_color='gray', width=1.5, alpha=0.7)
+
+    # Etiquetas de los nodos (opcional, puedes quitarlo si hay muchos)
+    nx.draw_networkx_labels(G, node_to_pos, font_size=8)
+
+    # Título y leyenda manual
+    plt.title("CoW graph")
+    plt.plot([], [], 'o', color='lightgreen', label='Inlet')
+    plt.plot([], [], 'o', color='salmon', label='Outlet (RCR)')
+    plt.plot([], [], 'o', color='skyblue', label='Junctions')
+    plt.legend(scatterpoints=1)
+    
+    plt.axis('equal') # Mantener la proporción real de las distancias
+    plt.grid(True, linestyle='--', alpha=0.3)
+    plt.show()
+
+
 og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models/Centerlines"
 centerlines = os.path.join(og_dir, "cow_full_final.vtp")
 output_file = os.path.join(og_dir, "zeroD_script_full.json")
@@ -182,16 +218,19 @@ my_flows = {
 }
 
 my_rcrs = {
-    0: [1000.0, 1e-6, 5000.0],
-    15: [1100.0, 1e-6, 5500.0],
-    16: [1400.0, 1e-6, 5000.0],
-    7: [1500.0, 1e-6, 5000.0],
-    18: [1500.0, 1e-6, 5000.0],
-    2: [1050.0, 1e-6, 5000.0],
-    14: [1400.0, 1e-6, 5000.0],
-    12: [1700.0, 1e-6, 5000.0]
+    0:  [1200.0, 1e-5, 12000.0], 
+    15: [1300.0, 1e-5, 13000.0],
+    2:  [1250.0, 1e-5, 12500.0],
+
+    16: [1600.0, 8e-6, 16000.0],
+    14: [1600.0, 8e-6, 16500.0],
+
+    7:  [2000.0, 6e-6, 22000.0],
+    18: [2000.0, 6e-6, 22000.0],
+    12: [2500.0, 5e-6, 25000.0]
 }
 
-generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs)
+segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs)
+visualize_graph(segments, pos_to_node, inlet_nodes, outlet_nodes)
                           
                           
