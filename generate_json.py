@@ -11,7 +11,10 @@ import matplotlib.pyplot as plt
 def read_flow_file(path):
     if path and os.path.exists(path):
         data = np.loadtxt(path)
-        return {"t": data[:, 0].tolist(), "Q": data[:, 1].tolist()}
+        return {
+            "t": data[:, 0].tolist(), 
+            "Q": np.abs(data[:, 1]).tolist()
+        }
     return {"t": [0.0, 1.0], "Q": [0.5, 0.5]}
 
 def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_values=None):
@@ -93,10 +96,11 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
     # PHASE 3: JSON ASSEMBLY
     model_0d = {
         "simulation_parameters": {
-            "number_of_cardiac_cycles": 1,
-            "number_of_time_pts_per_cardiac_cycle": 200,
+            "number_of_cardiac_cycles": 15,
+            "number_of_time_pts_per_cardiac_cycle": 1022,
             "time_step_size": 0.001,
-            "density": 1.06, "viscosity": 0.04,
+            "output_all_cycles": False,
+            "density": 0.00106, "viscosity": 0.004,
             "model_name": "Multi_Inlet_Model"
         },
         "boundary_conditions": [], "junctions": [], "vessels": []
@@ -156,51 +160,41 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
     return final_segments, pos_to_node, inlet_nodes, outlet_nodes
 
 def visualize_graph(final_segments, pos_to_node, inlet_nodes, outlet_nodes):
-    G = nx.DiGraph() # create directed graph
-    
-    # 2. Invertir pos_to_node para obtener coordenadas desde el ID del nodo
-    # pos_to_node tiene {(x, y, z): id}, queremos {id: (x, y)}
+    G = nx.DiGraph() 
     node_to_pos = {v: (k[0], k[1]) for k, v in pos_to_node.items()} 
 
-    # 3. Añadir aristas y nodos
     for b_id, data in final_segments.items():
         G.add_edge(data['n_in'], data['n_out'], id=b_id)
 
-    # 4. Definir colores de los nodos
     node_colors = []
     for node in G.nodes():
         if node in inlet_nodes:
-            node_colors.append('lightgreen')  # Inlets en Verde
+            node_colors.append('lightgreen') 
         elif node in outlet_nodes:
-            node_colors.append('salmon')      # Outlets en Rojo/Salmón
+            node_colors.append('salmon')      
         else:
-            node_colors.append('skyblue')     # Junctions en Azul
+            node_colors.append('skyblue')    
 
-    # 5. Dibujar
     plt.figure(figsize=(10, 10))
     
-    # Dibujamos usando node_to_pos como el layout real
     nx.draw_networkx_nodes(G, node_to_pos, node_size=300, node_color=node_colors, edgecolors='black')
     
-    # Dibujamos las arterias con flechas
     nx.draw_networkx_edges(G, node_to_pos, arrowstyle='->', arrowsize=15, 
                            edge_color='gray', width=1.5, alpha=0.7)
-
-    # Etiquetas de los nodos (opcional, puedes quitarlo si hay muchos)
     nx.draw_networkx_labels(G, node_to_pos, font_size=8)
 
-    # Título y leyenda manual
+
     plt.title("CoW graph")
     plt.plot([], [], 'o', color='lightgreen', label='Inlet')
     plt.plot([], [], 'o', color='salmon', label='Outlet (RCR)')
     plt.plot([], [], 'o', color='skyblue', label='Junctions')
     plt.legend(scatterpoints=1)
     
-    plt.axis('equal') # Mantener la proporción real de las distancias
+    plt.axis('equal') 
     plt.grid(True, linestyle='--', alpha=0.3)
     plt.show()
 
-
+"""
 og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models/Centerlines"
 centerlines = os.path.join(og_dir, "cow_full_final.vtp")
 output_file = os.path.join(og_dir, "zeroD_script_full.json")
@@ -229,8 +223,39 @@ my_rcrs = {
     18: [2000.0, 6e-6, 22000.0],
     12: [2500.0, 5e-6, 25000.0]
 }
-
 segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs)
 visualize_graph(segments, pos_to_node, inlet_nodes, outlet_nodes)
-                          
+"""
+og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models"
+centerlines = os.path.join(og_dir, "FULL_PIPELINE_FAST", "final_centerline.vtp")
+simulation_file = os.path.join(og_dir, "zeroD_simulation")
+output_file = os.path.join(simulation_file, "zeroD_script.json")
+
+carotid_left_flow = os.path.join(simulation_file, "LICA.dat")
+carotid_right_flow = os.path.join(simulation_file, "RICA.dat")
+vertebral_left_flow = os.path.join(simulation_file, "LVA.dat")
+vertebral_right_flow = os.path.join(simulation_file, "RVA.dat")
+
+my_flows = {
+    0: carotid_left_flow,
+    1: carotid_right_flow,
+    2: vertebral_right_flow,
+    3: vertebral_right_flow
+}
+
+my_rcrs = {
+    4:  [5.1975, 0.0049, 46.7775], 
+    5: [2.57565, 0.0099, 23.227],
+    6:  [0.47355, 0.054, 4.2735],
+
+    7: [1.32825, 0.0193, 11.9889],
+    8: [0.95865, 0.0269, 8.5932],
+
+    9:  [0.5082, 0.05, 4.62],
+    10: [2.99145, 0.0086, 26.9115],
+    11: [4.93185, 0.0052, 44.4329]
+}
+segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs)
+#visualize_graph(segments, pos_to_node, inlet_nodes, outlet_nodes)
+
                           

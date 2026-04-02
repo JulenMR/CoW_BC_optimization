@@ -6,67 +6,64 @@ import sys
 import os
 import matplotlib.pyplot as plt
 
-# 1. Ruta exacta al archivo postprocessing.py en tu repositorio
-# Verifica en tu terminal si esta ruta es correcta: ls ~/svZeroDSolver/python/pysvzerod/postprocessing.py
-example_file = "/home/julenmr/Downloads/SVAortofemoral/ROMSimulations/zerotwo/solver_0d.json"
-
-# 1. Cargar el JSON generado por SV
-og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models/Centerlines"
-# Procesar ambos ejemplos
-centerline = os.path.join(og_dir, "easy_example", "cow_full_final.vtp"), 
-json_file_easy = os.path.join(og_dir, "easy_example", "zeroD_script.json")
-json_file_meduim = os.path.join(og_dir, "medium_example", "zeroD_script.json")
-json_file_full = os.path.join(og_dir, "zeroD_script_full.json")
+json_file_full = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script.json"
 model_config = json.load(open(json_file_full))
 
-# 2. Inicializar y correr el solver
-print(" Ejecutando simulación 0D...")
+# Run solver
+print("Executing 0D simulation")
 solver = pysvzerod.Solver(model_config)
 solver.run()
 
-# 3. Obtener el DataFrame de resultados
+# Obtain df with results
 df = solver.get_full_result()
+df.to_csv("resultados_simulacion_completa.csv", index=False)
+print(df.info())
+print(f"Tiempo máximo en la simulación: {df['time'].max()} segundos")
+print(f"Número total de filas: {len(df)}")
 
-# 4. Mostrar las primeras filas y estadísticas básicas
-print("\n--- Vista previa de los resultados ---")
-print(df.head())
-print(df["name"].unique())
-
-
-import matplotlib.pyplot as plt
-
-def plot_custom_0d_results(df):
+def plot_custom_0d_results(df, branchnames, parameter):
     plt.figure(figsize=(10, 6))
+    found_any = False
     
-    # 1. Extraemos los datos para cada segmento específico
-    # Usamos los nombres exactos de tu JSON: branch0_seg0 y branch2_seg0
-    b0 = df[df['name'] == 'branch0']
-    b2 = df[df['name'] == 'branch2']
-    b1 = df[df['name'] == 'branch1'] # El tronco (entrada)
+    is_pressure = "pressure" in parameter
+    unit_label = " (mmHg)" if is_pressure else " (mL/s)"
 
-    # 2. Plotear Presión de Salida (pressure_out) para los dos últimos
-    if not b0.empty:
-        plt.plot(b0['time'], b0['pressure_out']/1333.3, label='Presión Salida Rama 0', linewidth=2)
-    if not b2.empty:
-        plt.plot(b2['time'], b2['pressure_out']/1333.3, label='Presión Salida Rama 2', linewidth=2)
-    
-    # 3. Opcional: Presión de Entrada en el tronco para ver la caída total
-    if not b1.empty:
-        plt.plot(b1['time'], b1['pressure_in']/1333.3, '--', label='Presión Entrada Tronco (b1)', alpha=0.6)
+    for name in branchnames:
+        branch_data = df[df['name'] == name]
+        
+        if not branch_data.empty:
+            y_values = branch_data[parameter].copy()
+            
+            if is_pressure:
+                y_values = y_values / 133.3
 
-    # Configuración estética
-    plt.title('Presión en los Segmentos de Salida de la Bifurcación')
-    plt.xlabel('Tiempo (s)')
-    plt.ylabel('Presión (mmHg)') # Recuerda: mmHg = Baryes / 1333.2
+            plt.plot(
+                branch_data['time'], 
+                y_values, 
+                label=f'{parameter}: {name}', 
+                linewidth=2
+            )
+            
+            found_any = True
+            
+            final_val = y_values.iloc[-1]
+            print(f" Graphed {name} - {parameter} final: {final_val:.2f}{unit_label}")
+        else:
+            print(f"Warning: brancg '{name}' not found")
+
+    if not found_any:
+        print("Branches not found")
+        plt.close()
+        return
+
+    plt.title(f'{parameter.replace("_", " ").title()} in selected branches')
+    plt.xlabel('Time (s)')
+    plt.ylabel(parameter + unit_label)
     plt.grid(True, which='both', linestyle='--', alpha=0.5)
     plt.legend()
-    
-    # Mostrar valores finales por consola (útil para debug)
-    if not b0.empty and not b2.empty:
-        print(f"--- Valores Finales (Estado Estacionario) ---")
-        print(f"P_out Rama 0: {b0['pressure_out'].iloc[-1]:.2f}")
-        print(f"P_out Rama 2: {b2['pressure_out'].iloc[-1]:.2f}")
-
+    plt.tight_layout()
     plt.show()
 
-plot_custom_0d_results(df)
+mis_ramas = ['branch0', 'branch1', 'branch2', 'branch3', 'branch6', 'branch7', 'branch8', 'branch9'] 
+parameter = "flow_in" 
+plot_custom_0d_results(df, mis_ramas, parameter)
