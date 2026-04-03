@@ -16,7 +16,6 @@ solver.run()
 
 # Obtain df with results
 df = solver.get_full_result()
-df.to_csv("resultados_simulacion_completa.csv", index=False)
 print(df.info())
 print(f"Tiempo máximo en la simulación: {df['time'].max()} segundos")
 print(f"Número total de filas: {len(df)}")
@@ -45,7 +44,6 @@ def plot_custom_0d_results(df, branchnames, parameter):
             )
             
             found_any = True
-            
             final_val = y_values.iloc[-1]
             print(f" Graphed {name} - {parameter} final: {final_val:.2f}{unit_label}")
         else:
@@ -66,4 +64,23 @@ def plot_custom_0d_results(df, branchnames, parameter):
 
 mis_ramas = ['branch0', 'branch1', 'branch2', 'branch3', 'branch6', 'branch7', 'branch8', 'branch9'] 
 parameter = "flow_in" 
-plot_custom_0d_results(df, mis_ramas, parameter)
+# plot_custom_0d_results(df, mis_ramas, parameter)
+
+outlet_branch_flow = 0
+for i in range(8):
+    j = 4 + i
+    branch_name = f"branch{j}"
+    branch_data = df[df['name'] == branch_name]
+    flow = branch_data["flow_out"].sum()
+    outlet_branch_flow += flow
+
+print(outlet_branch_flow)
+
+inlet_branch_flow = 0
+for i in range(4):
+    branch_name = f"branch{i}"
+    branch_data = df[df['name'] == branch_name]
+    flow = branch_data["flow_out"].sum()
+    inlet_branch_flow += flow
+
+print(inlet_branch_flow)
