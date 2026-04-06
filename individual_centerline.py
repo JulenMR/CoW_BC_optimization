@@ -50,25 +50,25 @@ def rebuild_polydata_from_scratch(polydata):
     return new_poly
 
 
-def extract_individual_paths(input_model_file, face_mapping, save_file, scaled_filename, scaling_factor = 1):
+def extract_individual_paths(input_model_file, face_mapping, save_file, scaled_filename, custom_objective_branches=None):
 
     if not os.path.exists(save_file):
         os.makedirs(save_file)
         print(f"Created filepath: {save_file}")
+    
 
-    inlet_names = ["cap_L_VA", "cap_R_VA", "cap_R_SCA", "cap_R_PCA", "cap_R_VA_2", "cap_L_ICA", "cap_R_ICA"]
-    outlet_names = ["cap_R_PCA", "cap_L_SCA", "cap_R_VA_2", "cap_R_ICA_2", "cap_R_ACA", "cap_L_ICA_2", "cap_L_ACA"]
-
-    cell_data_array = "ModelFaceID" 
-
-    in_ids = []
-    out_ids = []
-
-    for cap in inlet_names:
-        in_ids.append(face_mapping[cap])
-
-    for cap in outlet_names:
-        out_ids.append(face_mapping[cap])
+    if custom_objective_branches is not None:
+        objective_branches = custom_objective_branches
+    else:
+        objective_branches = [
+        ("cap_L_VA", "cap_R_PCA"),
+        ("cap_R_VA", "cap_L_SCA"),
+        ("cap_R_SCA", "cap_R_VA_2"),
+        ("cap_R_PCA", "cap_R_ICA_2"),
+        ("cap_R_VA_2", "cap_R_ACA"),
+        ("cap_L_ICA", "cap_L_ICA_2"),
+        ("cap_R_ICA", "cap_L_ACA"), 
+    ] 
 
     # Load original mesh
     reader = vtk.vtkXMLPolyDataReader()
@@ -76,28 +76,18 @@ def extract_individual_paths(input_model_file, face_mapping, save_file, scaled_f
     reader.Update()
     mesh = reader.GetOutput()
 
-    # Scaling
-    transform = vtk.vtkTransform()
-    transform.Scale(scaling_factor, scaling_factor, scaling_factor)
-    transformFilter = vtk.vtkTransformPolyDataFilter()
-    transformFilter.SetInputData(mesh)
-    transformFilter.SetTransform(transform)
-    transformFilter.Update()
-
-    mesh = transformFilter.GetOutput()
-    writer = vtk.vtkXMLPolyDataWriter()
-    writer.SetFileName(scaled_filename)
-    writer.SetInputData(mesh)
-    writer.Write()
-    print(f"Scaled object saved in {scaled_filename}")
 
     print("Phase 1: Extraction of individual branches")
-    for i in range(len(in_ids)):
-        in_id = in_ids[i]
-        out_id = out_ids[i]
+    for start_name, end_name in objective_branches:
+        if start_name not in face_mapping or end_name not in face_mapping:
+            print(f"  Skipping {start_name} -> {end_name}: Cap not found")
+            continue
+            
+        in_id = face_mapping[start_name]
+        out_id = face_mapping[end_name]
         
-        in_point = get_face_center(mesh, cell_data_array, in_id)
-        out_point = get_face_center(mesh, cell_data_array, out_id)
+        in_point = get_face_center(mesh, "ModelFaceID", in_id)
+        out_point = get_face_center(mesh, "ModelFaceID", out_id)
         
         if in_point is None or out_point is None:
             continue

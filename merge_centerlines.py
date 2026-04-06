@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from individual_centerline import get_face_center
 
-def centerline_merging(branch_files, scaled_model_path, output_file, face_mapping, tolerance_cleaning=0.01, spatial_tolerance=0.2):
+def centerline_merging(branch_files, input_model_file, output_file, face_mapping, tolerance_cleaning=0.01, spatial_tolerance=0.2):
 
     # Phase 1: Union and cleaning
     append_filter = vtk.vtkAppendPolyData()
@@ -81,7 +81,7 @@ def centerline_merging(branch_files, scaled_model_path, output_file, face_mappin
     ID_OFFSET_INTERNAL = 12
 
     reader_mesh = vtk.vtkXMLPolyDataReader()
-    reader_mesh.SetFileName(scaled_model_path)
+    reader_mesh.SetFileName(input_model_file)
     reader_mesh.Update()
     mesh_orig = reader_mesh.GetOutput()
 

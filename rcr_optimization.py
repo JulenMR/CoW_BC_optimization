@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 import random
 import copy 
-
+from zeroDSims import plot_custom_0d_results
 
 def return_rcr(json_dict, vessel_name):
     bc_list = json_dict["boundary_conditions"]
@@ -53,7 +53,7 @@ def objective_function(scaling_factors, base_params, json_dict, target_p, target
         branch_data = df[df['name'] == "branch7"]
         
         # Filtramos los últimos 200 puntos para asegurar estado estacionario
-        pressure_mmhg = branch_data["pressure_out"].iloc[-200:].values / 133.3
+        pressure_mmhg = branch_data["pressure_out"].values / 133.3
         
         p_mean = np.mean(pressure_mmhg)
         pulse = np.max(pressure_mmhg) - np.min(pressure_mmhg)
@@ -134,4 +134,12 @@ if __name__ == "__main__":
     with open(json_file, 'r') as file:
         json_dict = json.load(file)
 
-    Rp_f, Rd_f, C_f = rcr_optimization(json_dict, target_p=80, target_pulse=60)
+    final_Rp, final_Rd, final_C = rcr_optimization(json_dict, target_p=80, target_pulse=60)
+    json_to_run = copy.deepcopy(json_dict)
+    update_rcr(json_dict=json_to_run, new_Rp=final_Rp, new_C=final_C, new_Rd=final_Rd)
+    
+    solver = pysvzerod.Solver(json_to_run)
+    solver.run()
+    
+    df = solver.get_full_result()  
+    plot_custom_0d_results(df, ["branch7"], "pressure_out")
