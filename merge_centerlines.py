@@ -186,5 +186,5 @@ def centerline_merging(branch_files, input_model_file, output_file, face_mapping
     writer.SetInputData(final_net)
     writer.Write()
 
-    print(f"\n--- END ---")
+    print(f"\nEND")
     print(f"File saved in: {output_file}")

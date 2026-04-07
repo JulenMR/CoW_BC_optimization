@@ -50,12 +50,8 @@ def rebuild_polydata_from_scratch(polydata):
     return new_poly
 
 
-def extract_individual_paths(input_model_file, face_mapping, save_file, scaled_filename, custom_objective_branches=None):
+def extract_individual_paths(input_model_file, face_mapping, save_file, custom_objective_branches=None):
 
-    if not os.path.exists(save_file):
-        os.makedirs(save_file)
-        print(f"Created filepath: {save_file}")
-    
 
     if custom_objective_branches is not None:
         objective_branches = custom_objective_branches
@@ -95,7 +91,7 @@ def extract_individual_paths(input_model_file, face_mapping, save_file, scaled_f
         fixed_temp_out = os.path.join(save_file, f"individual_branch_{in_id}_{out_id}.vtp")
 
         vmtk_cmd = (
-            f'vmtksurfacereader -ifile {scaled_filename} '
+            f'vmtksurfacereader -ifile {input_model_file} '
             f'--pipe vmtkcenterlines -seedselector pointlist '
             f'-sourcepoints {in_point[0]} {in_point[1]} {in_point[2]} '
             f'-targetpoints {out_point[0]} {out_point[1]} {out_point[2]} '
