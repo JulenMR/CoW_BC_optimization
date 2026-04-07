@@ -57,14 +57,37 @@ def extract_individual_paths(input_model_file, face_mapping, save_file, custom_o
         objective_branches = custom_objective_branches
     else:
         objective_branches = [
-        ("cap_L_VA", "cap_R_PCA"),
-        ("cap_R_VA", "cap_L_SCA"),
-        ("cap_R_SCA", "cap_R_VA_2"),
-        ("cap_R_PCA", "cap_R_ICA_2"),
-        ("cap_R_VA_2", "cap_R_ACA"),
         ("cap_L_ICA", "cap_L_ICA_2"),
-        ("cap_R_ICA", "cap_L_ACA"), 
-    ] 
+        ("cap_R_ICA", "cap_R_ICA_2"),
+        ("cap_L_SCA", "cap_R_ACA"),
+        ("cap_R_SCA", "cap_L_ACA"),
+        ("cap_L_VA", "cap_R_PCA"),
+        ("cap_R_VA", "cap_R_VA_2"),
+        ("cap_L_ICA_2", "cap_R_ICA_2")
+    ]
+    all_cap_names = ["cap_L_ICA", "cap_L_ICA_2", "cap_R_ICA", "cap_R_ICA_2", "cap_L_SCA", "cap_R_ACA", "cap_R_SCA", "cap_L_ACA",
+                     "cap_L_VA", "cap_R_PCA", "cap_R_VA", "cap_R_VA_2"]
+    currents_caps = list(face_mapping.keys())
+    missing_caps = list(set(all_cap_names) - set(currents_caps))
+    subsitution_pairs = {
+        "cap_L_ICA":"cap_R_VA_2",
+        "cap_L_ICA_2":"cap_L_ACA",
+        "cap_R_ICA":"cap_R_PCA",
+        "cap_R_ICA_2":"cap_R_ACA",
+        "cap_L_VA":"cap_R_VA",
+        "cap_L_SCA":"cap_R_SCA"
+    }
+
+    if len(missing_caps)>0:
+        fixed_point = "cap_L_ICA" if "cap_L_ICA" in currents_caps else currents_caps[0]
+        objective_branches = [
+        (
+            subsitution_pairs.get(start, fixed_point) if start in missing_caps else start,
+            subsitution_pairs.get(end, fixed_point) if end in missing_caps else end
+        )
+        for start, end in objective_branches
+    ]
+        
 
     # Load original mesh
     reader = vtk.vtkXMLPolyDataReader()
