@@ -52,7 +52,6 @@ def objective_function(scaling_factors, base_params, json_dict, target_p, target
         df = solver.get_full_result()  
         branch_data = df[df['name'] == "branch7"]
         
-        # Filtramos los últimos 200 puntos para asegurar estado estacionario
         pressure_mmhg = branch_data["pressure_out"].values / 133.3
         
         p_mean = np.mean(pressure_mmhg)

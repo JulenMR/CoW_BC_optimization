@@ -6,7 +6,7 @@ import os
 from collections import deque, defaultdict
 import networkx as nx
 import matplotlib.pyplot as plt
-
+import pandas as pd
 
 def read_flow_file(path):
     if path and os.path.exists(path):
@@ -194,48 +194,75 @@ def visualize_graph(final_segments, pos_to_node, inlet_nodes, outlet_nodes):
     plt.grid(True, linestyle='--', alpha=0.3)
     plt.show()
 
-"""
-og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models/Centerlines"
-centerlines = os.path.join(og_dir, "cow_full_final.vtp")
-output_file = os.path.join(og_dir, "zeroD_script_full.json")
+def get_pressure(p_file, p_number):
+    pressure_data = pd.read_csv(p_file)
+    row = pressure_data[pressure_data['subject'] == p_number]
+    
+    if row.empty:
+        raise ValueError(f"Patient {p_number} not found")
+    
+    sbp = float(row['SBP'].values[0])
+    dbp = float(row['DBP'].values[0])
+    print(f"{sbp} mmHg {dbp} mmHg")
+    
+    map_pressure = (sbp + 2 * dbp) / 3 
+    pulse_pressure = sbp - dbp      
+    
+    return map_pressure, pulse_pressure
 
-carotid_left_flow = os.path.join(og_dir, "carotid_left.flow")
-carotid_right_flow = os.path.join(og_dir, "carotid_right.flow")
-vertebral_left_flow = os.path.join(og_dir, "vertebral_left.flow")
-vertebral_right_flow = os.path.join(og_dir, "vertebral_right.flow")
 
-my_flows = {
-    6: carotid_left_flow,
-    1: carotid_right_flow,
-    17: vertebral_right_flow,
-    11: vertebral_right_flow
-}
+def get_initial_BC(flow_file, pressure_file, patient_number, tau = 1.022):
+    my_rcrs = {}
+    clinical_data = pd.read_csv(flow_file)
 
-my_rcrs = {
-    0:  [1200.0, 1e-5, 12000.0], 
-    15: [1300.0, 1e-5, 13000.0],
-    2:  [1250.0, 1e-5, 12500.0],
+    for region_name, branch_id in mapping_dict.items():
+        row = clinical_data[clinical_data['Region'] == region_name]
+        q_mean = row['Flow_mm3_s'].values[0]
+        p_mean,_ = get_pressure(p_file=pressure_file, p_number=patient_number)
+        p_dyn = p_mean*1333.3
+        r_total = p_dyn / q_mean
+    
+        r_p = 0.1 * r_total
+        r_d = 0.9 * r_total
+        
+        c = tau / r_d
+        rp = round(r_p, 6)
+        rd = round(r_d, 6)
+        c = round(c, 6)
+        
+        my_rcrs[branch_id] = [float(rp), float(c), float(rd)]
+        
+    print("\n Dictionary created")
+    for bid, values in sorted(my_rcrs.items()):
+        print(f"{bid}: {values}")
 
-    16: [1600.0, 8e-6, 16000.0],
-    14: [1600.0, 8e-6, 16500.0],
+    return my_rcrs
 
-    7:  [2000.0, 6e-6, 22000.0],
-    18: [2000.0, 6e-6, 22000.0],
-    12: [2500.0, 5e-6, 25000.0]
-}
-segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs)
-visualize_graph(segments, pos_to_node, inlet_nodes, outlet_nodes)
-"""
 og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models"
-centerlines = os.path.join(og_dir, "FULL_PIPELINE_FAST", "final_centerline.vtp")
+centerlines = os.path.join(og_dir, "CENTERLINE", "final_centerline.vtp")
 simulation_file = os.path.join(og_dir, "zeroD_simulation")
 output_file = os.path.join(simulation_file, "zeroD_script.json")
+clinical_flows_file = os.path.join(og_dir, "ASL_BC_subject5_FINAL.csv")
+pressure_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/subject_targets.csv"
+
 
 carotid_left_flow = os.path.join(simulation_file, "LICA.dat")
 carotid_right_flow = os.path.join(simulation_file, "RICA.dat")
 vertebral_left_flow = os.path.join(simulation_file, "LVA.dat")
 vertebral_right_flow = os.path.join(simulation_file, "RVA.dat")
 
+mapping_dict = {
+    "SCA_L":4,
+    "PCA_L":5,
+    "MCA_L":6,
+    "ACA_L":7,
+    "ACA_R":8,
+    "MCA_R":9,
+    "PCA_R":10,
+    "SCA_R":11,
+}
+
+my_rcrs = get_initial_BC(flow_file=clinical_flows_file, pressure_file=pressure_data_file, patient_number=5)
 my_flows = {
     0: carotid_left_flow,
     1: carotid_right_flow,
@@ -243,18 +270,6 @@ my_flows = {
     3: vertebral_right_flow
 }
 
-my_rcrs = {
-    4:  [5.1975, 0.0049, 46.7775], 
-    5: [2.57565, 0.0099, 23.227],
-    6:  [0.47355, 0.054, 4.2735],
-
-    7: [1.32825, 0.0193, 11.9889],
-    8: [0.95865, 0.0269, 8.5932],
-
-    9:  [0.5082, 0.05, 4.62],
-    10: [2.99145, 0.0086, 26.9115],
-    11: [4.93185, 0.0052, 44.4329]
-}
 segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs)
 #visualize_graph(segments, pos_to_node, inlet_nodes, outlet_nodes)
 

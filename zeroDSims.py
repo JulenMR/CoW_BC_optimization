@@ -64,7 +64,7 @@ def plot_custom_0d_results(df, branchnames, parameter):
 
 mis_ramas = ['branch0', 'branch1', 'branch2', 'branch3', 'branch6', 'branch7', 'branch8', 'branch9'] 
 parameter = "flow_in" 
-# plot_custom_0d_results(df, mis_ramas, parameter)
+plot_custom_0d_results(df, mis_ramas, parameter)
 
 outlet_branch_flow = 0
 for i in range(8):
