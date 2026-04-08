@@ -4,23 +4,43 @@ import numpy as np
 import pandas as pd
 from individual_centerline import get_face_center
 
-def centerline_merging(branch_files, input_model_file, output_file, face_mapping, tolerance_cleaning=0.01, spatial_tolerance=0.2):
+def centerline_merging(branch_files, aca_files, tol_high, tol_low, input_model_file, output_file, face_mapping, spatial_tolerance=0.2):
 
     # Phase 1: Union and cleaning
-    append_filter = vtk.vtkAppendPolyData()
-    for f in branch_files:
+    append_general = vtk.vtkAppendPolyData()
+    for f in [f for f in branch_files if f not in aca_files]:
         reader = vtk.vtkXMLPolyDataReader()
         reader.SetFileName(f); reader.Update()
-        append_filter.AddInputData(reader.GetOutput())
-    append_filter.Update()
+        append_general.AddInputData(reader.GetOutput())
+    append_general.Update()
 
-    cleaner = vtk.vtkCleanPolyData()
-    cleaner.SetInputData(append_filter.GetOutput())
-    cleaner.SetTolerance(tolerance_cleaning) 
-    cleaner.PointMergingOn()
-    cleaner.Update()
+    cleaner_general = vtk.vtkCleanPolyData()
+    cleaner_general.SetInputData(append_general.GetOutput())
+    cleaner_general.SetTolerance(tol_high)
+    cleaner_general.Update()
 
-    clean_poly = cleaner.GetOutput()
+    # --- FASE 2: Unir ACAs (Tolerancia Baja) ---
+    append_acas = vtk.vtkAppendPolyData()
+    for f in aca_files:
+        reader = vtk.vtkXMLPolyDataReader()
+        reader.SetFileName(f); reader.Update()
+        append_acas.AddInputData(reader.GetOutput())
+    append_acas.Update()
+
+    # --- FASE 3: Unión Final y Eliminación de Duplicados ---
+    final_append = vtk.vtkAppendPolyData()
+    final_append.AddInputData(cleaner_general.GetOutput())
+    final_append.AddInputData(append_acas.GetOutput())
+    final_append.Update()
+
+    # Limpieza final suave para soldar los puntos de contacto entre ACAs y el resto
+    final_cleaner = vtk.vtkCleanPolyData()
+    final_cleaner.SetInputData(final_append.GetOutput())
+    final_cleaner.SetTolerance(tol_low) 
+    final_cleaner.Update()
+
+    # --- Tu lógica de unique_cells y stripper ---
+    clean_poly = final_cleaner.GetOutput()
     unique_cells = vtk.vtkCellArray()
     existing_segments = set()
 
@@ -75,7 +95,7 @@ def centerline_merging(branch_files, input_model_file, output_file, face_mapping
 
     # Phase 4: Generate BranchIDs
     MASTER_INFLOWS = ["cap_L_ICA", "cap_R_ICA", "cap_L_VA", "cap_R_VA"]
-    MASTER_OUTFLOWS = ["cap_L_SCA", "cap_R_VA_2", "cap_L_ICA_2", "cap_L_ACA", "cap_R_ACA", "cap_R_ICA_2", "cap_R_PCA", "cap_R_SCA"]
+    MASTER_OUTFLOWS = ["cap_L_SCA", "cap_L_PCA", "cap_L_ICA_2", "cap_L_ACA", "cap_R_ACA", "cap_R_ICA_2", "cap_R_PCA", "cap_R_SCA"]
 
     ID_OFFSET_OUTFLOWS = 4
     ID_OFFSET_INTERNAL = 12

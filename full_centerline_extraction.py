@@ -8,35 +8,19 @@ from merge_centerlines import *
 import glob
 import time
 
-"""
-# 326_no_collaterals
-og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models"
-save_file = os.path.join(og_dir, "FULL_PIPELINE")
-input_file = os.path.join(og_dir, "no_collaterals.vtp")
-xml_file = os.path.join(og_dir, "no_collaterals.mdl")
-
-inlet_names = ["cap_LeftVert_Basilar_LeftPost", "cap_RightVert", "cap_Right_SCA", "cap_Right_Post",
-                "cap_Left_ICA_MCA_2", "cap_Left_ICA_MCA", "cap_Right_ICA_MCA"]
-outlet_names = ["cap_Right_Post", "cap_Left_SCA", "cap_LeftVert_Basilar_LeftPost_2", "cap_Right_ICA_MCA_2",
-                "cap_Right_Anterior", "cap_Left_ICA_MCA_2", "cap_Left_Anterior"]
-MASTER_INFLOWS = ["cap_Left_ICA_MCA", "cap_Right_ICA_MCA", "cap_LeftVert_Basilar_LeftPost", "cap_RightVert"]
-MASTER_OUTFLOWS = ["cap_Left_SCA", "cap_LeftVert_Basilar_LeftPost_2", "cap_Left_ICA_MCA_2", "cap_Left_Anterior", "cap_Right_Anterior", "cap_Right_ICA_MCA_2", "cap_Right_Post", "cap_Right_SCA"]
-
-"""
-
 if __name__ == "__main__":
     
     start_time = time.time()
     og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models"
 
-    save_file = os.path.join(og_dir, "PROBANDO_PATHS")
+    save_file = os.path.join(og_dir, "CENTERLINE")
     if not os.path.exists(save_file):
         os.makedirs(save_file)
         print(f"Created filepath: {save_file}")
     
     input_file = os.path.join(og_dir, "cow_super_coarse.vtp")
     xml_file = os.path.join(og_dir, "cow.mdl")
-    final_centerline_file = os.path.join(save_file, "final_centerline.vtp")
+    final_centerline_file = os.path.join(save_file, "final_centerline_2.vtp")
 
     # Face mapping
     df_faceID = pd.read_xml(xml_file, xpath=".//face", parser="etree")
@@ -47,18 +31,23 @@ if __name__ == "__main__":
     objective_branches = [
         ("cap_L_ICA", "cap_L_ICA_2"),
         ("cap_R_ICA", "cap_R_ICA_2"),
-        ("cap_L_SCA", "cap_R_ACA"),
-        ("cap_R_SCA", "cap_L_ACA"),
+        ("cap_L_SCA", "cap_L_ICA_2"),
+        ("cap_R_SCA", "cap_R_ICA_2"),
         ("cap_L_VA", "cap_R_PCA"),
-        ("cap_R_VA", "cap_R_VA_2"),
-        ("cap_L_ICA_2", "cap_R_ICA_2")
+        ("cap_R_VA", "cap_L_PCA"),
+        ("cap_L_ICA_2", "cap_R_ICA_2"),
+        ("cap_L_ACA", "cap_R_ACA")
     ]
 
-    extract_individual_paths(input_model_file=input_file, face_mapping=face_mapping, save_file=save_file, custom_objective_branches = None)
+    #extract_individual_paths(input_model_file=input_file, face_mapping=face_mapping, save_file=save_file, custom_objective_branches = objective_branches)
     
-    branch_files = glob.glob(os.path.join(save_file, "individual_branch_*"))
-    centerline_merging(branch_files=branch_files, input_model_file=input_file, output_file=final_centerline_file,
-                        face_mapping = face_mapping, tolerance_cleaning=0.011, spatial_tolerance=2)
+    branch_files = glob.glob(os.path.join(save_file, "indbr_*"))
+    aca_files = [f for f in branch_files if "ACA" in os.path.basename(f)]
+    rest_files = [f for f in branch_files if "ACA" not in os.path.basename(f)]
+
+    centerline_merging(branch_files=rest_files, aca_files=aca_files, input_model_file=input_file, output_file=final_centerline_file,
+                        face_mapping = face_mapping, tol_high=0.03, tol_low = 0.012, spatial_tolerance=3)
+    
     end_time = time.time()
     print(f"Execution time: {end_time - start_time} seconds")
 

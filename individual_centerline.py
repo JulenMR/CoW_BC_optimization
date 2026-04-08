@@ -59,18 +59,19 @@ def extract_individual_paths(input_model_file, face_mapping, save_file, custom_o
         objective_branches = [
         ("cap_L_ICA", "cap_L_ICA_2"),
         ("cap_R_ICA", "cap_R_ICA_2"),
-        ("cap_L_SCA", "cap_R_ACA"),
-        ("cap_R_SCA", "cap_L_ACA"),
+        ("cap_L_SCA", "cap_L_ICA_2"),
+        ("cap_R_SCA", "cap_R_ICA_2"),
         ("cap_L_VA", "cap_R_PCA"),
-        ("cap_R_VA", "cap_R_VA_2"),
-        ("cap_L_ICA_2", "cap_R_ICA_2")
+        ("cap_R_VA", "cap_L_PCA"),
+        ("cap_L_ICA_2", "cap_R_ICA_2"),
+        ("cap_L_ACA", "cap_R_ACA")
     ]
     all_cap_names = ["cap_L_ICA", "cap_L_ICA_2", "cap_R_ICA", "cap_R_ICA_2", "cap_L_SCA", "cap_R_ACA", "cap_R_SCA", "cap_L_ACA",
-                     "cap_L_VA", "cap_R_PCA", "cap_R_VA", "cap_R_VA_2"]
+                     "cap_L_VA", "cap_R_PCA", "cap_R_VA", "cap_L_PCA"]
     currents_caps = list(face_mapping.keys())
     missing_caps = list(set(all_cap_names) - set(currents_caps))
     subsitution_pairs = {
-        "cap_L_ICA":"cap_R_VA_2",
+        "cap_L_ICA":"cap_L_PCA",
         "cap_L_ICA_2":"cap_L_ACA",
         "cap_R_ICA":"cap_R_PCA",
         "cap_R_ICA_2":"cap_R_ACA",
@@ -111,7 +112,9 @@ def extract_individual_paths(input_model_file, face_mapping, save_file, custom_o
         if in_point is None or out_point is None:
             continue
 
-        fixed_temp_out = os.path.join(save_file, f"individual_branch_{in_id}_{out_id}.vtp")
+        clean_start_name = start_name.removeprefix("cap_")
+        clean_end_name = end_name.removeprefix("cap_")
+        fixed_temp_out = os.path.join(save_file, f"indbr_{clean_start_name}_{clean_end_name}.vtp")
 
         vmtk_cmd = (
             f'vmtksurfacereader -ifile {input_model_file} '
@@ -120,7 +123,7 @@ def extract_individual_paths(input_model_file, face_mapping, save_file, custom_o
             f'-targetpoints {out_point[0]} {out_point[1]} {out_point[2]} '
             f'-capdisplacement 0.0 '  
             f'-endpoints 1 '          
-            f'-resampling 1 -resamplingstep 0.1 ' 
+            f'-resampling 1 -resamplingstep 0.05 ' 
         )
         
         print(f"\n>> Processing path from {in_id} to {out_id}")
