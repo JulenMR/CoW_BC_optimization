@@ -3,12 +3,17 @@ from collections import defaultdict
 import numpy as np
 import pandas as pd
 from individual_centerline import get_face_center
+import os
 
-def centerline_merging(branch_files, aca_files, tol_high, tol_low, input_model_file, output_file, face_mapping, spatial_tolerance=0.2):
+def centerline_merging(branch_files, tol_high, tol_low, input_model_file, output_file, face_mapping, spatial_tolerance=0.2):
 
-    # Phase 1: Union and cleaning
+    # Phase 1: Union and cleaning in 2 phases
+    aca_files = [f for f in branch_files if "ACA" in os.path.basename(f)]
+    not_aca_files = [f for f in branch_files if "ACA" not in os.path.basename(f)]
+
+    # General branch union (high tolerance)
     append_general = vtk.vtkAppendPolyData()
-    for f in [f for f in branch_files if f not in aca_files]:
+    for f in [f for f in not_aca_files if f not in aca_files]:
         reader = vtk.vtkXMLPolyDataReader()
         reader.SetFileName(f); reader.Update()
         append_general.AddInputData(reader.GetOutput())
@@ -19,7 +24,7 @@ def centerline_merging(branch_files, aca_files, tol_high, tol_low, input_model_f
     cleaner_general.SetTolerance(tol_high)
     cleaner_general.Update()
 
-    # --- FASE 2: Unir ACAs (Tolerancia Baja) ---
+    # Final union with ACAs lower tolerance
     append_acas = vtk.vtkAppendPolyData()
     for f in aca_files:
         reader = vtk.vtkXMLPolyDataReader()
@@ -27,19 +32,17 @@ def centerline_merging(branch_files, aca_files, tol_high, tol_low, input_model_f
         append_acas.AddInputData(reader.GetOutput())
     append_acas.Update()
 
-    # --- FASE 3: Unión Final y Eliminación de Duplicados ---
     final_append = vtk.vtkAppendPolyData()
     final_append.AddInputData(cleaner_general.GetOutput())
     final_append.AddInputData(append_acas.GetOutput())
     final_append.Update()
 
-    # Limpieza final suave para soldar los puntos de contacto entre ACAs y el resto
     final_cleaner = vtk.vtkCleanPolyData()
     final_cleaner.SetInputData(final_append.GetOutput())
     final_cleaner.SetTolerance(tol_low) 
     final_cleaner.Update()
 
-    # --- Tu lógica de unique_cells y stripper ---
+    # Clean duplicates
     clean_poly = final_cleaner.GetOutput()
     unique_cells = vtk.vtkCellArray()
     existing_segments = set()
@@ -93,7 +96,7 @@ def centerline_merging(branch_files, aca_files, tol_high, tol_low, input_model_f
         if len(current_branch) > 1:
             segmented_cells.append(list(current_branch))
 
-    # Phase 4: Generate BranchIDs
+    # Phase 4: Generate BranchIDs and Inflow/Outflow
     MASTER_INFLOWS = ["cap_L_ICA", "cap_R_ICA", "cap_L_VA", "cap_R_VA"]
     MASTER_OUTFLOWS = ["cap_L_SCA", "cap_L_PCA", "cap_L_ICA_2", "cap_L_ACA", "cap_R_ACA", "cap_R_ICA_2", "cap_R_PCA", "cap_R_SCA"]
 
@@ -106,7 +109,7 @@ def centerline_merging(branch_files, aca_files, tol_high, tol_low, input_model_f
     mesh_orig = reader_mesh.GetOutput()
 
     target_centers = {}
-    print("\n--- COORDENADAS CENTROS CARAS ---")
+    print("\n Face center coordenates")
     for name in MASTER_INFLOWS + MASTER_OUTFLOWS:
         fid = face_mapping.get(name)
         if fid:
@@ -136,14 +139,14 @@ def centerline_merging(branch_files, aca_files, tol_high, tol_low, input_model_f
         min_d = float('inf')
         target_match = ""
 
-        # Diagnóstico espacial
+        # Spatial diagnostic
         for name, center in target_centers.items():
             dist = min(np.linalg.norm(p_start - center), np.linalg.norm(p_end - center))
             if dist < min_d:
                 min_d = dist
                 target_match = name
 
-        # Asignación
+        # Inflow and Outflow setting
         for idx, name in enumerate(MASTER_INFLOWS):
             if name in target_centers:
                 if min(np.linalg.norm(p_start - target_centers[name]), np.linalg.norm(p_end - target_centers[name])) < spatial_tolerance:
@@ -164,7 +167,7 @@ def centerline_merging(branch_files, aca_files, tol_high, tol_low, input_model_f
         final_cell_array.InsertNextCell(poly_line)
         branch_ids.InsertNextValue(assigned_id)
 
-    # -Phase 6: Set Nodetype, UsageTag and Radius
+    # Phase 5: Set Nodetype, UsageTag and Radius
     final_net.SetLines(final_cell_array)
     final_net.GetCellData().AddArray(branch_ids)
 
@@ -179,7 +182,7 @@ def centerline_merging(branch_files, aca_files, tol_high, tol_low, input_model_f
         node_type_array.SetTuple1(i, node_connectivity[i])
     final_net.GetPointData().AddArray(node_type_array)
 
-    # 3. UsageTag
+    # Set UsageTag
     usage_tags = vtk.vtkIntArray()
     usage_tags.SetName("UsageTag")
     in_centers = [target_centers[n] for n in MASTER_INFLOWS if n in target_centers]
