@@ -6,8 +6,11 @@ import sys
 import os
 import matplotlib.pyplot as plt
 
-json_file_full = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script.json"
-model_config = json.load(open(json_file_full))
+json_file_original = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script.json"
+json_file_1_phase = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_optimized.json"
+json_file_optimized = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_phase1.json"
+
+model_config = json.load(open(json_file_optimized))
 
 # Run solver
 print("Executing 0D simulation")
@@ -33,8 +36,12 @@ def plot_custom_0d_results(df, branchnames, parameter):
         if not branch_data.empty:
             y_values = branch_data[parameter].copy()
             
-            if is_pressure:
-                y_values = y_values / 133.3
+            if "pressure" in parameter:
+                y_values = y_values / 1333.3
+            elif "flow" in parameter:
+                y_values = y_values / 1000
+
+
 
             plt.plot(
                 branch_data['time'], 
@@ -47,7 +54,7 @@ def plot_custom_0d_results(df, branchnames, parameter):
             final_val = y_values.iloc[-1]
             print(f" Graphed {name} - {parameter} final: {final_val:.2f}{unit_label}")
         else:
-            print(f"Warning: brancg '{name}' not found")
+            print(f"Warning: branch '{name}' not found")
 
     if not found_any:
         print("Branches not found")
@@ -62,25 +69,57 @@ def plot_custom_0d_results(df, branchnames, parameter):
     plt.tight_layout()
     plt.show()
 
-mis_ramas = ['branch0', 'branch1', 'branch2', 'branch3', 'branch6', 'branch7', 'branch8', 'branch9'] 
-parameter = "flow_in" 
-plot_custom_0d_results(df, mis_ramas, parameter)
+inlets = ['branch0', 'branch1', 'branch2', 'branch3'] 
+outlets = ['branch4', 'branch5', 'branch6', 'branch7', 'branch8', 'branch9', 'branch10', 'branch11'] 
+total = inlets + outlets
+#print(total)
 
-outlet_branch_flow = 0
-for i in range(8):
-    j = 4 + i
-    branch_name = f"branch{j}"
-    branch_data = df[df['name'] == branch_name]
-    flow = branch_data["flow_out"].sum()
-    outlet_branch_flow += flow
+def check_mass_conservation(df, inlet_names, outlet_names, period=1.022):
+    # 1. Filtrar el último ciclo para evitar transitorios iniciales
+    t_max = df['time'].max()
+    last_cycle = df[df['time'] > (t_max - period)]
+    
+    # 2. Calcular la suma de los flujos medios de entrada
+    total_inflow = 0
+    print("\n>>> DETALLE DE ENTRADAS (Inlets):")
+    for name in inlet_names:
+        # Usamos flow_in porque es lo que entra al dominio desde el BC
+        avg_q = last_cycle[last_cycle['name'] == name]['flow_in'].mean()
+        # En SimVascular los inflows suelen ser negativos en los .dat, 
+        # pero pysvzerod suele reportar la magnitud. Usamos abs() para asegurar.
+        avg_q = abs(avg_q)
+        print(f"  {name}: {avg_q:8.2f} mm3/s")
+        total_inflow += avg_q
+        
+    # 3. Calcular la suma de los flujos medios de salida
+    total_outflow = 0
+    print("\n>>> DETALLE DE SALIDAS (Outlets):")
+    for name in outlet_names:
+        avg_q = last_cycle[last_cycle['name'] == name]['flow_out'].mean()
+        print(f"  {name}: {avg_q:8.2f} mm3/s")
+        total_outflow += avg_q
+        
+    # 4. Comparación Final
+    difference = abs(total_inflow - total_outflow)
+    error_relativo = (difference / total_inflow) * 100
+    
+    print("\n" + "="*40)
+    print(f"TOTAL INFLOW:  {total_inflow:10.2f} mm3/s")
+    print(f"TOTAL OUTFLOW: {total_outflow:10.2f} mm3/s")
+    print(f"DIFERENCIA:    {difference:10.4f} mm3/s")
+    print(f"ERROR:         {error_relativo:10.6f} %")
+    print("="*40)
 
-print(outlet_branch_flow)
+# Ejecutar la comprobación
+inlets = ['branch0', 'branch1', 'branch2', 'branch3']
+outlets = ['branch4', 'branch5', 'branch6', 'branch7', 'branch8', 'branch9', 'branch10', 'branch11']
+check_mass_conservation(df, inlets, outlets)
 
-inlet_branch_flow = 0
-for i in range(4):
-    branch_name = f"branch{i}"
-    branch_data = df[df['name'] == branch_name]
-    flow = branch_data["flow_out"].sum()
-    inlet_branch_flow += flow
+p_start = df[df['name'] == 'branch0']['pressure_in'].iloc[-1022]
+p_end = df[df['name'] == 'branch0']['pressure_in'].iloc[-1]
+print(f"Diferencia de presión inicio-fin: {p_end - p_start}")
+plot_custom_0d_results(df, total, "pressure_out" )
+plot_custom_0d_results(df, total, "flow_out" )
 
-print(inlet_branch_flow)
+
+

@@ -96,12 +96,14 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
     # PHASE 3: JSON ASSEMBLY
     model_0d = {
         "simulation_parameters": {
-            "number_of_cardiac_cycles": 15,
+            "number_of_cardiac_cycles": 50,
             "number_of_time_pts_per_cardiac_cycle": 1022,
             "time_step_size": 0.001,
             "output_all_cycles": False,
             "density": 0.00106, "viscosity": 0.004,
-            "model_name": "Multi_Inlet_Model"
+            "model_name": "Multi_Inlet_Model",
+            "steady_initial": True,
+            "sim_cycle_to_cycle_percent_error": 0.1,
         },
         "boundary_conditions": [], "junctions": [], "vessels": []
     }
@@ -203,8 +205,7 @@ def get_pressure(p_file, p_number):
     
     sbp = float(row['SBP'].values[0])
     dbp = float(row['DBP'].values[0])
-    print(f"{sbp} mmHg {dbp} mmHg")
-    
+        
     map_pressure = (sbp + 2 * dbp) / 3 
     pulse_pressure = sbp - dbp      
     
@@ -246,10 +247,10 @@ clinical_flows_file = os.path.join(og_dir, "ASL_BC_subject5_FINAL.csv")
 pressure_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/subject_targets.csv"
 
 
-carotid_left_flow = os.path.join(simulation_file, "LICA.dat")
-carotid_right_flow = os.path.join(simulation_file, "RICA.dat")
-vertebral_left_flow = os.path.join(simulation_file, "LVA.dat")
-vertebral_right_flow = os.path.join(simulation_file, "RVA.dat")
+carotid_left_flow = os.path.join(simulation_file, "LICA_synthetic.dat")
+carotid_right_flow = os.path.join(simulation_file, "RICA_synthetic.dat")
+vertebral_left_flow = os.path.join(simulation_file, "LVA_synthetic.dat")
+vertebral_right_flow = os.path.join(simulation_file, "RVA_synthetic.dat")
 
 mapping_dict = {
     "SCA_L":4,
@@ -266,7 +267,7 @@ my_rcrs = get_initial_BC(flow_file=clinical_flows_file, pressure_file=pressure_d
 my_flows = {
     0: carotid_left_flow,
     1: carotid_right_flow,
-    2: vertebral_right_flow,
+    2: vertebral_left_flow,
     3: vertebral_right_flow
 }
 
