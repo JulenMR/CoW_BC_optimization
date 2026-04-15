@@ -17,7 +17,7 @@ def read_flow_file(path):
         }
     return {"t": [0.0, 1.0], "Q": [0.5, 0.5]}
 
-def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_values=None):
+def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_values=None, tau = None):
     """
     flow_files: dict {branch_id: "path/to/file.flow"}
     rcr_values: dict {branch_id: [Rp, C, Rd]}
@@ -94,16 +94,17 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
                 queue.append(n_out) # Adds the outlet node to the queue
 
     # PHASE 3: JSON ASSEMBLY
+    last_t = int(tau*1000)
     model_0d = {
         "simulation_parameters": {
-            "number_of_cardiac_cycles": 50,
-            "number_of_time_pts_per_cardiac_cycle": 1022,
+            "number_of_cardiac_cycles": 10,
+            "number_of_time_pts_per_cardiac_cycle": last_t,
             "time_step_size": 0.001,
             "output_all_cycles": False,
             "density": 0.00106, "viscosity": 0.004,
             "model_name": "Multi_Inlet_Model",
             "steady_initial": True,
-            "sim_cycle_to_cycle_percent_error": 0.1,
+            "sim_cycle_to_cycle_percent_error": 0.5,
         },
         "boundary_conditions": [], "junctions": [], "vessels": []
     }
@@ -115,9 +116,9 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
             "vessel_id": b_id, "vessel_name": f"branch{b_id}",
             "vessel_length": data['length'], "zero_d_element_type": "BloodVessel",
             "zero_d_element_values": { # Applies Poiseuilles laws to get R, C, L
-                "R_poiseuille": (8.0 * 0.04 * data['length']) / (np.pi * data['radius']**4), 
-                "L": (1.06 * data['length']) / (np.pi * data['radius']**2),
-                "C": (3.0 * data['length'] * np.pi * data['radius']**3) / (2.0 * 0.05 * 1e6),
+                "R_poiseuille": (8.0 * 0.004 * data['length']) / (np.pi * data['radius']**4), 
+                "L": (0.00106 * data['length']) / (np.pi * data['radius']**2),
+                "C": (3.0 * data['length'] * np.pi * data['radius']**3) / (0.8 * 1e6),
                 "stenosis_coefficient": 0.0
             },
             "boundary_conditions": {}
@@ -239,19 +240,25 @@ def get_initial_BC(flow_file, pressure_file, patient_number, tau = 1.022):
 
     return my_rcrs
 
-og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models"
+og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models"
 centerlines = os.path.join(og_dir, "CENTERLINE", "final_centerline.vtp")
 simulation_file = os.path.join(og_dir, "zeroD_simulation")
+if not os.path.exists(simulation_file):
+        os.makedirs(simulation_file)
+        print(f"Created filepath: {simulation_file}")
 output_file = os.path.join(simulation_file, "zeroD_script.json")
-clinical_flows_file = os.path.join(og_dir, "ASL_BC_subject5_FINAL.csv")
+clinical_flows_file = os.path.join(og_dir, "ASL_BC_subject8_FINAL.csv")
 pressure_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/subject_targets.csv"
 
 
-carotid_left_flow = os.path.join(simulation_file, "LICA_synthetic.dat")
-carotid_right_flow = os.path.join(simulation_file, "RICA_synthetic.dat")
-vertebral_left_flow = os.path.join(simulation_file, "LVA_synthetic.dat")
-vertebral_right_flow = os.path.join(simulation_file, "RVA_synthetic.dat")
+carotid_left_flow = os.path.join(simulation_file, "LICA_smooth.dat")
+carotid_right_flow = os.path.join(simulation_file, "RICA_smooth.dat")
+vertebral_left_flow = os.path.join(simulation_file, "LVA_smooth.dat")
+vertebral_right_flow = os.path.join(simulation_file, "RVA_smooth.dat")
 
+flow_data = np.loadtxt(carotid_left_flow)
+tau_param = np.round(flow_data[-1, 0],3)
+print(f"tau: {tau_param}")
 mapping_dict = {
     "SCA_L":4,
     "PCA_L":5,
@@ -263,7 +270,7 @@ mapping_dict = {
     "SCA_R":11,
 }
 
-my_rcrs = get_initial_BC(flow_file=clinical_flows_file, pressure_file=pressure_data_file, patient_number=5)
+my_rcrs = get_initial_BC(flow_file=clinical_flows_file, pressure_file=pressure_data_file, patient_number=8, tau=tau_param)
 my_flows = {
     0: carotid_left_flow,
     1: carotid_right_flow,
@@ -271,7 +278,7 @@ my_flows = {
     3: vertebral_right_flow
 }
 
-segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs)
+segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs, tau=tau_param)
 #visualize_graph(segments, pos_to_node, inlet_nodes, outlet_nodes)
 
                           

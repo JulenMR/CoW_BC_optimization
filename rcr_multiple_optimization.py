@@ -185,11 +185,11 @@ def run_global_optimization(json_file_path, target_p, target_pulse, target_flows
         base_params_list.append(copy.deepcopy(params))
 
     bounds = [(0.7, 3.0), (0.7, 3.0), (0.5, 5.0)]*8
-    bounds_2 = [(0.8, 1.3), (0.1, 10.0), (0.9, 1.1)]*8
+    bounds_2 = [(0.8, 1.3), (0.7, 3.0), (0.9, 1.1)]*8
     initial_guess = [1.0] * 24
     
     # --- PHASE 1: PRESSURE ---
-    print("\n>>> PHASE 1: Inlet pressure setting")
+    print(f"\n>>> PHASE 1: Inlet pressure setting | Mean pressure: {target_p}, Pulse: {target_pulse} ")
     res_phase1 = minimize(
         objective_function_1,
         initial_guess,
@@ -224,11 +224,11 @@ def run_global_optimization(json_file_path, target_p, target_pulse, target_flows
 
 
 if __name__ == "__main__":
-    path_to_json = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script.json"
+    path_to_json = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models/zeroD_simulation/zeroD_script.json"
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
-    output_json = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_optimized.json"
-    mean_p, pulse = get_pressure(p_file=clinical_data_file, p_number=5)
-    clinical_flows = get_clinical_flows(file=clinical_data_file, p_number=5)
+    output_json = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models/zeroD_simulation/zeroD_script_optimized.json"
+    mean_p, pulse = get_pressure(p_file=clinical_data_file, p_number=8)
+    clinical_flows = get_clinical_flows(file=clinical_data_file, p_number=8)
     iteration_count = 0
 
     BRANCH_MAPPING = {
