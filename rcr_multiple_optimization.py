@@ -38,7 +38,7 @@ def get_inlet_stats(df, inlet_names):
     stats = {}
     for name in inlet_names:
         data = df[df['name'] == name]
-        p_values = data["pressure_in"].values / 1333.322
+        p_values = data["pressure_in"].values / 133.322
         stats[name] = {
             "mean": np.mean(p_values),
             "pulse": np.max(p_values) - np.min(p_values)
@@ -137,7 +137,7 @@ def objective_function_1(scaling_factors, base_params_list, json_dict, target_p,
             
             error_p = ((m - target_p) / target_p)**2
             error_pulse = ((p - target_pulse) / target_pulse)**2
-            total_error += (2.0 * error_p) + (4.0 * error_pulse)
+            total_error += (1.0 * error_p) + (1.0 * error_pulse)
 
         return total_error
     except Exception:
@@ -199,7 +199,7 @@ def run_global_optimization(json_file_path, target_p, target_pulse, target_flows
         options={'ftol': 1e-3, 'maxiter': 30},
         callback=lambda xk: monitor_callback(xk, base_params_list, json_dict)
     )
-    output_json_phase_1 = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_phase1.json"
+    output_json_phase_1 = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models/zeroD_simulation/zeroD_script_phase1.json"
     phase1_json = copy.deepcopy(json_dict)
     update_all_outlets(phase1_json, res_phase1.x, base_params_list)
     with open(output_json_phase_1, "w") as f:

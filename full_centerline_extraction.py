@@ -11,7 +11,7 @@ import time
 if __name__ == "__main__":
     
     start_time = time.time()
-    og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-011/Models"
+    og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models"
 
     save_file = os.path.join(og_dir, "CENTERLINE")
     if not os.path.exists(save_file):
@@ -20,7 +20,7 @@ if __name__ == "__main__":
     
     input_file = os.path.join(og_dir, "cow_super_coarse.vtp")
     xml_file = os.path.join(og_dir, "cow.mdl")
-    final_centerline_file = os.path.join(save_file, "centerline prueba1.vtp")
+    final_centerline_file = os.path.join(save_file, "centerline_final.vtp")
 
     # Face mapping
     df_faceID = pd.read_xml(xml_file, xpath=".//face", parser="etree")
@@ -46,7 +46,7 @@ if __name__ == "__main__":
     rest_files = [f for f in branch_files if "ACA" not in os.path.basename(f)]
 
     centerline_merging(branch_files=branch_files, input_model_file=input_file, output_file=final_centerline_file,
-                        face_mapping = face_mapping, tol_high=0.004, tol_low = 0.004, spatial_tolerance=3)
+                        face_mapping = face_mapping, tol_high=0.004, tol_low = 0.004, spatial_tolerance=2)
     
     end_time = time.time()
     print(f"Execution time: {end_time - start_time} seconds")

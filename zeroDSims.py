@@ -7,8 +7,8 @@ import os
 import matplotlib.pyplot as plt
 
 json_file_original = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models/zeroD_simulation/zeroD_script.json"
-json_file_1_phase = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_optimized.json"
-json_file_optimized = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_phase1.json"
+json_file_1_phase = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_phase1.json"
+json_file_optimized = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_optimized.json"
 
 model_config = json.load(open(json_file_original))
 
@@ -37,7 +37,7 @@ def plot_custom_0d_results(df, branchnames, parameter):
             y_values = branch_data[parameter].copy()
             
             if "pressure" in parameter:
-                y_values = y_values / 1333.3
+                y_values = y_values / 133.3
             elif "flow" in parameter:
                 y_values = y_values / 1000
 

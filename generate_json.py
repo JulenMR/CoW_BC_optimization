@@ -110,15 +110,16 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
     }
 
     junction_data = defaultdict(lambda: {"in": [], "out": []})
-
+    E = 1e9 # Youngs modulus
+    h = 0.1 # wall thickness
     for b_id, data in final_segments.items(): # Iterates every branch
         vessel = {
             "vessel_id": b_id, "vessel_name": f"branch{b_id}",
             "vessel_length": data['length'], "zero_d_element_type": "BloodVessel",
             "zero_d_element_values": { # Applies Poiseuilles laws to get R, C, L
                 "R_poiseuille": (8.0 * 0.004 * data['length']) / (np.pi * data['radius']**4), 
-                "L": (0.00106 * data['length']) / (np.pi * data['radius']**2),
-                "C": (3.0 * data['length'] * np.pi * data['radius']**3) / (0.8 * 1e6),
+                "L": 0, #(0.00106 * data['length']) / (np.pi * data['radius']**2),
+                "C": (3.0 * data['length'] * np.pi * data['radius']**3) / (2 * E*h),
                 "stenosis_coefficient": 0.0
             },
             "boundary_conditions": {}
@@ -139,6 +140,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
 
         if data['is_outlet']: # If the branch has an outlet sets RCR
             bc_name = f"RCR_{b_id}"
+            print(f"Adding: {bc_name}")
             vessel["boundary_conditions"]["outlet"] = bc_name
             vals = rcr_values.get(b_id, [1000.0, 1e-6, 5000.0]) if rcr_values else [1000.0, 1e-6, 5000.0]
             model_0d["boundary_conditions"].append({
@@ -221,8 +223,9 @@ def get_initial_BC(flow_file, pressure_file, patient_number, tau = 1.022):
         row = clinical_data[clinical_data['Region'] == region_name]
         q_mean = row['Flow_mm3_s'].values[0]
         p_mean,_ = get_pressure(p_file=pressure_file, p_number=patient_number)
-        p_dyn = p_mean*1333.3
+        p_dyn = p_mean*133.3
         r_total = p_dyn / q_mean
+        print(f"total resistance: {r_total}")
     
         r_p = 0.1 * r_total
         r_d = 0.9 * r_total
@@ -241,7 +244,7 @@ def get_initial_BC(flow_file, pressure_file, patient_number, tau = 1.022):
     return my_rcrs
 
 og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models"
-centerlines = os.path.join(og_dir, "CENTERLINE", "final_centerline.vtp")
+centerlines = os.path.join(og_dir, "CENTERLINE", "centerline_final.vtp")
 simulation_file = os.path.join(og_dir, "zeroD_simulation")
 if not os.path.exists(simulation_file):
         os.makedirs(simulation_file)
