@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os 
 from scipy.interpolate import CubicSpline
 
-og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models"
+og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-011/Models"
 simulation_file = os.path.join(og_dir, "zeroD_simulation")
 
 flow_files = {
@@ -17,7 +17,7 @@ plt.figure(figsize=(12, 8))
 
 for i, (label, path) in enumerate(flow_files.items()):
     if os.path.exists(path):
-        data = np.loadtxt(path)
+        data = np.loadtxt(path, skiprows=1)
         sort_idx = np.argsort(data[:, 0])
         time_pts = data[sort_idx, 0]
         flow_pts = np.abs(data[sort_idx, 1])
@@ -27,7 +27,6 @@ for i, (label, path) in enumerate(flow_files.items()):
         t_penult, t_last = time_pts[-2], time_pts[-1]
         f_penult, f_last = flow_pts[-2], flow_pts[-1]
         
-        # Generamos, por ejemplo, 5 puntos intermedios
         n_puntos_falsos = 2
         t_falsos = np.linspace(t_penult, t_last, n_puntos_falsos + 2)[1:-1]
         # Interpolación lineal: f = f1 + (t - t1) * (f2 - f1) / (t2 - t1)

@@ -6,11 +6,11 @@ import sys
 import os
 import matplotlib.pyplot as plt
 
-json_file_original = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models/zeroD_simulation/zeroD_script.json"
-json_file_1_phase = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_phase1.json"
-json_file_optimized = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_optimized.json"
+json_file_original = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-011/Models/zeroD_simulation/zeroD_script.json"
+json_file_1_phase = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models/zeroD_simulation/zeroD_script_phase1.json"
+json_file_optimized = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-011/Models/zeroD_simulation/zeroD_script_optimized.json"
 
-model_config = json.load(open(json_file_original))
+model_config = json.load(open(json_file_optimized))
 
 # Run solver
 print("Executing 0D simulation")
@@ -23,7 +23,7 @@ print(df.info())
 print(f"Tiempo máximo en la simulación: {df['time'].max()} segundos")
 print(f"Número total de filas: {len(df)}")
 
-def plot_custom_0d_results(df, branchnames, parameter):
+def plot_custom_0d_results(df, branchnames, parameter, mapping):
     plt.figure(figsize=(10, 6))
     found_any = False
     
@@ -32,7 +32,7 @@ def plot_custom_0d_results(df, branchnames, parameter):
 
     for name in branchnames:
         branch_data = df[df['name'] == name]
-        
+        label_name = mapping[name]
         if not branch_data.empty:
             y_values = branch_data[parameter].copy()
             
@@ -44,13 +44,12 @@ def plot_custom_0d_results(df, branchnames, parameter):
             plt.plot(
                 branch_data['time'], 
                 y_values, 
-                label=f'{parameter}: {name}', 
+                label=f'{parameter}: {label_name}', 
                 linewidth=2
             )
             
             found_any = True
-            final_val = y_values.iloc[-1]
-            print(f" Graphed {name} - {parameter} final: {final_val:.2f}{unit_label}")
+
         else:
             print(f"Warning: branch '{name}' not found")
 
@@ -71,46 +70,16 @@ inlets = ['branch0', 'branch1', 'branch2', 'branch3']
 outlets = ['branch4', 'branch5', 'branch6', 'branch7', 'branch8', 'branch9', 'branch10', 'branch11'] 
 total = inlets + outlets
 
-def check_mass_conservation(df, inlet_names, outlet_names, period=1.022):
-    t_max = df['time'].max()
-    last_cycle = df[df['time'] > (t_max - period)]
-    
-    total_inflow = 0
-    print("\n>>> (Inlets):")
-    for name in inlet_names:
-        avg_q = last_cycle[last_cycle['name'] == name]['flow_in'].mean()
-        avg_q = abs(avg_q)
-        print(f"  {name}: {avg_q:8.2f} mm3/s")
-        total_inflow += avg_q
-        
-    total_outflow = 0
-    print("\n>>> (Outlets):")
-    for name in outlet_names:
-        avg_q = last_cycle[last_cycle['name'] == name]['flow_out'].mean()
-        print(f"  {name}: {avg_q:8.2f} mL/s")
-        total_outflow += avg_q
-        
-    difference = abs(total_inflow - total_outflow)
-    error_relativo = (difference / total_inflow) * 100
-    
-    print("\n" + "="*40)
-    print(f"TOTAL INFLOW:  {total_inflow:10.2f} mL/s")
-    print(f"TOTAL OUTFLOW: {total_outflow:10.2f} mL/s")
-    print(f"DIFERENCIA:    {difference:10.4f} mL/s")
-    print(f"ERROR:         {error_relativo:10.6f} %")
-    print("="*40)
+BRANCH_MAPPING = {
+    "branch0": "ICA_L", "branch1": "ICA_R", "branch2": "VA_L", "branch3": "VA_R", "branch4": "SCA_L", "branch5": "PCA_L", 
+    "branch6": "MCA_L", "branch7": "ACA_L", "branch8": "ACA_R", "branch9": "MCA_R", "branch10": "PCA_R", "branch11": "SCA_R"
+    }
 
-check_mass_conservation(df, inlets, outlets)
+plot_custom_0d_results(df, outlets, "flow_in", BRANCH_MAPPING)
+plot_custom_0d_results(df, outlets, "flow_out", BRANCH_MAPPING)
 
-p_start = df[df['name'] == 'branch0']['pressure_in'].iloc[-1022]
-p_end = df[df['name'] == 'branch0']['pressure_in'].iloc[-1]
-print(f"Difference between inlet and outlet: {p_end - p_start}")
-
-plot_custom_0d_results(df, inlets, "flow_in" )
-plot_custom_0d_results(df, inlets, "flow_out")
-
-plot_custom_0d_results(df, inlets, "pressure_in" )
-plot_custom_0d_results(df, inlets, "pressure_out")
+plot_custom_0d_results(df, outlets, "pressure_in", BRANCH_MAPPING)
+plot_custom_0d_results(df, outlets, "pressure_out", BRANCH_MAPPING)
 
 
 

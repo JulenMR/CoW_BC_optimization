@@ -199,8 +199,8 @@ def visualize_graph(final_segments, pos_to_node, inlet_nodes, outlet_nodes):
     plt.grid(True, linestyle='--', alpha=0.3)
     plt.show()
 
-def get_pressure(p_file, p_number):
-    pressure_data = pd.read_csv(p_file)
+def get_clinical_data(file, p_number):
+    pressure_data = pd.read_csv(file)
     row = pressure_data[pressure_data['subject'] == p_number]
     
     if row.empty:
@@ -210,32 +210,48 @@ def get_pressure(p_file, p_number):
     dbp = float(row['DBP'].values[0])
         
     map_pressure = (sbp + 2 * dbp) / 3 
-    pulse_pressure = sbp - dbp      
+    pulse_pressure = sbp - dbp
+
+    data = row.iloc[0, 4:].to_dict()
+    flow_dict = {k.strip(): v*1000.0 for k, v in data.items()}      
+    print(f"\n--- Datos Clínicos Cargados (Paciente {p_number}) ---")
+    print(f"Presión Media (MAP): {map_pressure:.2f} mmHg")
+    print(f"Presión de Pulso:     {pulse_pressure:.2f} mmHg")
+    print("-" * 40)
+    print(f"{'Arteria':<15} | {'Flujo (mm3/s)':>15}")
+    print("-" * 40)
+    for artery, flow in flow_dict.items():
+        print(f"{artery:<15} | {flow:>15.2f}")
+    print("-" * 40 + "\n")
     
-    return map_pressure, pulse_pressure
+    return map_pressure, pulse_pressure, flow_dict
 
 
-def get_initial_BC(flow_file, pressure_file, patient_number, tau = 1.022):
+def get_initial_BC(clinical_data_file, patient_number, mapping_dict, tau = 1.022):
     my_rcrs = {}
-    clinical_data = pd.read_csv(flow_file)
-
+    p_mean,_, flow_dict = get_clinical_data(file=clinical_data_file, p_number=patient_number)
+    print(f"Claves en flow_dict: {list(flow_dict.keys())}")
+    print(f"Buscando regiones: {list(mapping_dict.keys())}")
     for region_name, branch_id in mapping_dict.items():
-        row = clinical_data[clinical_data['Region'] == region_name]
-        q_mean = row['Flow_mm3_s'].values[0]
-        p_mean,_ = get_pressure(p_file=pressure_file, p_number=patient_number)
-        p_dyn = p_mean*133.3
-        r_total = p_dyn / q_mean
-        print(f"total resistance: {r_total}")
-    
-        r_p = 0.1 * r_total
-        r_d = 0.9 * r_total
+        if region_name in flow_dict:
+            q_mean = flow_dict[region_name]
+
+            p_dyn = p_mean * 133.3
+            r_total = p_dyn / q_mean
         
-        c = tau / r_d
-        rp = round(r_p, 6)
-        rd = round(r_d, 6)
-        c = round(c, 6)
-        
-        my_rcrs[branch_id] = [float(rp), float(c), float(rd)]
+            r_p = 0.1 * r_total
+            r_d = 0.9 * r_total
+            
+            tau_val = tau  
+            c_val = tau_val / r_d
+            
+            rp = round(r_p, 6)
+            rd = round(r_d, 6)
+            c = round(c_val, 6)
+            
+            my_rcrs[branch_id] = [float(rp), float(c), float(rd)]
+        else:
+            continue
         
     print("\n Dictionary created")
     for bid, values in sorted(my_rcrs.items()):
@@ -243,15 +259,15 @@ def get_initial_BC(flow_file, pressure_file, patient_number, tau = 1.022):
 
     return my_rcrs
 
-og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models"
+patient_number = 11
+og_dir = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models"
 centerlines = os.path.join(og_dir, "CENTERLINE", "centerline_final.vtp")
 simulation_file = os.path.join(og_dir, "zeroD_simulation")
 if not os.path.exists(simulation_file):
         os.makedirs(simulation_file)
         print(f"Created filepath: {simulation_file}")
 output_file = os.path.join(simulation_file, "zeroD_script.json")
-clinical_flows_file = os.path.join(og_dir, "ASL_BC_subject8_FINAL.csv")
-pressure_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/subject_targets.csv"
+clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
 
 
 carotid_left_flow = os.path.join(simulation_file, "LICA_smooth.dat")
@@ -273,7 +289,7 @@ mapping_dict = {
     "SCA_R":11,
 }
 
-my_rcrs = get_initial_BC(flow_file=clinical_flows_file, pressure_file=pressure_data_file, patient_number=8, tau=tau_param)
+my_rcrs = get_initial_BC(clinical_data_file=clinical_data_file, patient_number=patient_number, mapping_dict = mapping_dict, tau=tau_param)
 my_flows = {
     0: carotid_left_flow,
     1: carotid_right_flow,
