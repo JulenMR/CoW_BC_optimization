@@ -259,7 +259,7 @@ def get_initial_BC(clinical_data_file, patient_number, mapping_dict, tau = 1.022
 
     return my_rcrs
 
-patient_number = 11
+patient_number = 5
 og_dir = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models"
 centerlines = os.path.join(og_dir, "CENTERLINE", "centerline_final.vtp")
 simulation_file = os.path.join(og_dir, "zeroD_simulation")

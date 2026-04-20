@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os 
 from scipy.interpolate import CubicSpline
 
-og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-011/Models"
+og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models"
 simulation_file = os.path.join(og_dir, "zeroD_simulation")
 
 flow_files = {

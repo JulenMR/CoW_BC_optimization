@@ -13,16 +13,16 @@ class OptimizatorState:
         self.last_p_pulse = 0.0
         self.last_flow_errors = {}
         self.last_total_flow_err = 0.0
+        self.last_flows_sim = {}    # Nuevo: Guardar flujos simulados
+        self.last_flows_target = {} # Nuevo: Guardar flujos objetivo
 
-    def update_p(self, m, p):
-        self.last_p_mean = m
-        self.last_p_pulse = p
-
-    def update_f(self, p_mean, p_pulse, flow_dict, total_err):
+    def update_f(self, p_mean, p_pulse, flow_err_dict, total_err, sim_vals, target_vals):
         self.last_p_mean = p_mean
         self.last_p_pulse = p_pulse
-        self.last_flow_errors = flow_dict
+        self.last_flow_errors = flow_err_dict
         self.last_total_flow_err = total_err
+        self.last_flows_sim = sim_vals
+        self.last_flows_target = target_vals
 
 state = OptimizatorState()
 
@@ -83,21 +83,35 @@ def objective_phase2(xk, base_params, json_dict, target_flows, target_p, target_
         
         flow_err_sum = 0
         individual_errors = {}
-        for b_name, csv_name in BRANCH_MAP.items():
-            q_target = target_flows[csv_name] * 1000.0
-            q_sim = sim_flows[b_name]
-            err = ((q_sim - q_target) / q_target)**2
-            flow_err_sum += err
-            individual_errors[csv_name] = np.sqrt(err) * 100
+        sim_vals_log = {}
+        target_vals_log = {}
 
-        # Pressure and pulse penalization
+        for b_name, csv_name in BRANCH_MAP.items():
+            # CORRECCIÓN: Si clinical_flows ya tiene el *1000, no lo repitas aquí
+            q_target = target_flows[csv_name] 
+            q_sim = sim_flows[b_name]
+            
+            # Error cuadrático relativo
+            err_sq = ((q_sim - q_target) / q_target)**2
+            flow_err_sum += err_sq
+            
+            # Guardar para el estado (en porcentaje para humanos)
+            individual_errors[csv_name] = np.sqrt(err_sq) * 100
+            sim_vals_log[csv_name] = q_sim
+            target_vals_log[csv_name] = q_target
+
         p_penalty = 1.0 * ((p_mean - target_p) / target_p)**2
         pulse_penalty = 1.0 * ((p_pulse - target_pulse) / target_pulse)**2
         
-        state.update_f(p_mean, p_pulse, individual_errors, np.mean(list(individual_errors.values())))
+        # Actualizar estado con todos los datos
+        state.update_f(p_mean, p_pulse, individual_errors, 
+                       np.mean(list(individual_errors.values())),
+                       sim_vals_log, target_vals_log)
         
         return flow_err_sum + p_penalty + pulse_penalty
-    except: return 1e10
+    except Exception as e: 
+        print(f"Error en simulación: {e}")
+        return 1e10
 
 # CALLBACKS LIGEROS
 
@@ -107,8 +121,20 @@ def cb_p1(xk):
 
 def cb_p2(xk):
     state.iteration += 1
-    print(f"P2 | Iter {state.iteration:02d} | P_avg: {state.last_p_mean:5.1f} | P_pulse: {state.last_p_pulse:5.1f} | Flow Err: {state.last_total_flow_err:5.2f}%")
-
+    # Solo imprimimos cada N iteraciones o todas si quieres detalle
+    print(f"\n{'='*60}")
+    print(f" ITERATION {state.iteration:02d} | Mean_error: {state.last_total_flow_err:5.2f}%")
+    print(f" P_avg: {state.last_p_mean:5.1f} | P_pulse: {state.last_p_pulse:5.1f}")
+    print(f"{'-'*60}")
+    print(f"{'Vessel':<12} | {'Simulated':>12} | {'Target':>12} | {'Error %':>8}")
+    print(f"{'-'*60}")
+    
+    for name in sorted(state.last_flows_sim.keys()):
+        sim = state.last_flows_sim[name]
+        target = state.last_flows_target[name]
+        err = state.last_flow_errors[name]
+        print(f"{name:<12} | {sim:12.2f} | {target:12.2f} | {err:7.1f}%")
+    print(f"{'='*65}")
 # MAIN PIPELINE
 
 def run_optimization(json_path, target_p, target_pulse, clinical_flows, BRANCH_MAP):
@@ -142,10 +168,10 @@ def run_optimization(json_path, target_p, target_pulse, clinical_flows, BRANCH_M
     return final_json
 
 if __name__ == "__main__":
-    patient_number = 11
+    patient_number = 5
     path_to_json = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models/zeroD_simulation/zeroD_script.json"
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
-    output_json = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models/zeroD_simulation/zeroD_script_optimized.json"
+    output_json = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models/zeroD_simulation/zeroD_script_optimized_prueba.json"
     mean_p, pulse, clinical_flows = get_clinical_data(file=clinical_data_file, p_number=patient_number)
     iteration_count = 0
 
