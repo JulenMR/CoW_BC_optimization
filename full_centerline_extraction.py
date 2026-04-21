@@ -12,14 +12,14 @@ if __name__ == "__main__":
     patient_number = 11
     start_time = time.time()
     og_dir = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models"
-
+    og_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/326_no_collaterals/Models"
     save_file = os.path.join(og_dir, "CENTERLINE")
     if not os.path.exists(save_file):
         os.makedirs(save_file)
         print(f"Created filepath: {save_file}")
     
-    input_file = os.path.join(og_dir, "cow_super_coarse.vtp")
-    xml_file = os.path.join(og_dir, "cow.mdl")
+    input_file = os.path.join(og_dir, "no_collaterals_remeshed.vtp")
+    xml_file = os.path.join(og_dir, "no_collaterals.mdl")
     final_centerline_file = os.path.join(save_file, "centerline_final.vtp")
 
     # Face mapping
@@ -39,14 +39,14 @@ if __name__ == "__main__":
         ("cap_L_ACA", "cap_R_ACA")
     ]
 
-    #extract_individual_paths(input_model_file=input_file, face_mapping=face_mapping, save_file=save_file, custom_objective_branches = objective_branches)
+    extract_individual_paths(input_model_file=input_file, face_mapping=face_mapping, save_file=save_file, custom_objective_branches = None)
     
     branch_files = glob.glob(os.path.join(save_file, "indbr_*"))
     aca_files = [f for f in branch_files if "ACA" in os.path.basename(f)]
     rest_files = [f for f in branch_files if "ACA" not in os.path.basename(f)]
 
     centerline_merging(branch_files=branch_files, input_model_file=input_file, output_file=final_centerline_file,
-                        face_mapping = face_mapping, tol_high=0.018, tol_low = 0.004, spatial_tolerance=2)
+                        face_mapping = face_mapping, tol_high=0.015, tol_low = 0.004, spatial_tolerance=2)
     
     end_time = time.time()
     print(f"Execution time: {end_time - start_time} seconds")

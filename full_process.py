@@ -86,7 +86,7 @@ if __name__ == "__main__":
     segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, initial_json_file, my_flows, my_rcrs, tau=tau_param)
 
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
-    optimized_json = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models/zeroD_simulation/zeroD_script_optimized.json"
+    optimized_json = os.path.join(simulation_file, "zeroD_script_optimized.json")
     mean_p, pulse, clinical_flows  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
     iteration_count = 0
 
