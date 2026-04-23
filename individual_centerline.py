@@ -81,34 +81,29 @@ def detect_stenosis_array(polydata, window_size=21, poly_order=2, threshold_perc
     # Create an array full of zeros
     stenosis_mask = np.zeros(len(radii), dtype=np.int32)
     
-    # Si la reducción total supera el umbral, marcamos la zona crítica
-    # La zona crítica es donde el radio es menor al 70% del máximo o donde la derivada es muy negativa
     if stenosis_severity > threshold_percent:
-        # Marcamos como 1 los puntos que están cerca del mínimo local (la zona estrecha)
-        critical_limit = r_min * 1.2 # Un 20% margen sobre el mínimo
+        critical_limit = r_min * 1.2 
         for i in range(len(r_smooth)):
             if r_smooth[i] < critical_limit and r_smooth[i] < (r_max_ref * 0.7):
                 stenosis_mask[i] = 1
 
-    # 5. Volver a meter los datos en VTK
-    # Array de Derivada
+
     deriv_array = vtk.vtkDoubleArray()
     deriv_array.SetName("RadiusDerivative")
     for val in dr_ds: deriv_array.InsertNextValue(val)
     polydata.GetPointData().AddArray(deriv_array)
     
-    # Array de Máscara (0 o 1)
+    # Stenosis mask
     mask_array = vtk.vtkIntArray()
     mask_array.SetName("StenosisMask")
     for val in stenosis_mask: mask_array.InsertNextValue(int(val))
     polydata.GetPointData().AddArray(mask_array)
     
-    print(f"    Análisis: Reducción max: {stenosis_severity:.1f}% | Estenosis: {'SÍ' if stenosis_severity > threshold_percent else 'NO'}")
+    print(f"    Analysis: Maximum reduction: {stenosis_severity:.1f}% | Stenosis: {'Yes' if stenosis_severity > threshold_percent else 'No'}")
     
     return polydata
 
 def extract_individual_paths(input_model_file, face_mapping, save_file, custom_objective_branches=None):
-
 
     if custom_objective_branches is not None:
         objective_branches = custom_objective_branches
@@ -181,7 +176,7 @@ def extract_individual_paths(input_model_file, face_mapping, save_file, custom_o
             f'-resampling 1 -resamplingstep 0.05 ' 
         )
         
-        print(f"\n>> Processing path from {in_id} to {out_id}")
+        print(f"\n>> Processing path from {clean_start_name} to {clean_end_name}")
         myPype = pypes.PypeRun(vmtk_cmd)
 
         cl_obj = myPype.GetScriptObject('vmtkcenterlines', '0').Centerlines

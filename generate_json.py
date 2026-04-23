@@ -18,17 +18,14 @@ def read_flow_file(path):
     return {"t": [0.0, 1.0], "Q": [0.5, 0.5]}
 
 def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_values=None, tau = None):
-    """
-    flow_files: dict {branch_id: "path/to/file.flow"}
-    rcr_values: dict {branch_id: [Rp, C, Rd]}
-    """
+
     if not os.path.exists(vtp_path):
         print(f"Error: File not found at {vtp_path}")
         return
 
-    print(f"\n" + "="*40)
-    print(f"PROCESSING MULTI-INLET MODEL: {os.path.basename(vtp_path)}")
-    print("="*40)
+    print(f"\n" + "="*55)
+    print(f"POSTPROCESSING CENTERLINE: {os.path.basename(vtp_path)}")
+    print("="*55)
 
     reader = vtk.vtkXMLPolyDataReader()
     reader.SetFileName(vtp_path)
@@ -67,11 +64,6 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
             tag = int(usage_tags[p_id])
             if tag == 1: inlet_nodes.add(get_node(p_id)) # Save inlets
             elif tag == 2: outlet_nodes.add(get_node(p_id)) # Save outlets
-
-    for i, inlet in enumerate(inlet_nodes):
-        print(f"Inlet {i}: {inlet}") 
-    for i, outlet in enumerate(outlet_nodes):
-        print(f"Outlet {i}: {outlet}") 
 
     # PHASE 2: ORIENTATION with Breadth First Search algorithm
     final_segments = {}
@@ -134,7 +126,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
                 "bc_name": bc_name, "bc_type": "FLOW", 
                 "bc_values": read_flow_file(f_path)
             })
-            print(f"   Inlet {b_id}: Assigned flow from {os.path.basename(f_path) if f_path else 'default'}")
+            print(f"Inlet {b_id}: Assigned flow from {os.path.basename(f_path) if f_path else 'default'}")
         else:
             junction_data[data['n_in']]["out"].append(b_id) # Saves the b_id as an end of its starting node
 
@@ -161,7 +153,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
 
     with open(output_path, 'w') as f:
         json.dump(model_0d, f, indent=4)
-    print(f"\nCOMPLETED. Multi-inlet JSON saved: {output_path}")
+    print(f"\nCOMPLETED. Initial JSON saved: {output_path}")
     return final_segments, pos_to_node, inlet_nodes, outlet_nodes
 
 def visualize_graph(final_segments, pos_to_node, inlet_nodes, outlet_nodes):
@@ -214,11 +206,11 @@ def get_clinical_data(file, p_number):
 
     data = row.iloc[0, 4:].to_dict()
     flow_dict = {k.strip(): v*1000.0 for k, v in data.items()}      
-    print(f"\n--- Datos Clínicos Cargados (Paciente {p_number}) ---")
-    print(f"Presión Media (MAP): {map_pressure:.2f} mmHg")
-    print(f"Presión de Pulso:     {pulse_pressure:.2f} mmHg")
+    print(f"\nClinical data for PACS{p_number:03d}")
+    print(f"Mean pressure: {map_pressure:.2f} mmHg")
+    print(f"Pulse: {pulse_pressure:.2f} mmHg")
     print("-" * 40)
-    print(f"{'Arteria':<15} | {'Flujo (mm3/s)':>15}")
+    print(f"{'Vessel':<15} | {'Flow (mm3/s)':>15}")
     print("-" * 40)
     for artery, flow in flow_dict.items():
         print(f"{artery:<15} | {flow:>15.2f}")
@@ -230,8 +222,7 @@ def get_clinical_data(file, p_number):
 def get_initial_BC(clinical_data_file, patient_number, mapping_dict, tau = 1.022):
     my_rcrs = {}
     p_mean,_, flow_dict = get_clinical_data(file=clinical_data_file, p_number=patient_number)
-    print(f"Claves en flow_dict: {list(flow_dict.keys())}")
-    print(f"Buscando regiones: {list(mapping_dict.keys())}")
+
     for region_name, branch_id in mapping_dict.items():
         if region_name in flow_dict:
             q_mean = flow_dict[region_name]
@@ -253,51 +244,53 @@ def get_initial_BC(clinical_data_file, patient_number, mapping_dict, tau = 1.022
         else:
             continue
         
-    print("\n Dictionary created")
+    print("\n Initial boundary conditions")
     for bid, values in sorted(my_rcrs.items()):
         print(f"{bid}: {values}")
 
     return my_rcrs
 
-patient_number = 5
-og_dir = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models"
-centerlines = os.path.join(og_dir, "CENTERLINE", "centerline_final.vtp")
-simulation_file = os.path.join(og_dir, "zeroD_simulation")
-if not os.path.exists(simulation_file):
-        os.makedirs(simulation_file)
-        print(f"Created filepath: {simulation_file}")
-output_file = os.path.join(simulation_file, "zeroD_script.json")
-clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
+if __name__ == "__main__":
+
+    patient_number = 5
+    og_dir = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models"
+    centerlines = os.path.join(og_dir, "CENTERLINE", "centerline_final.vtp")
+    simulation_file = os.path.join(og_dir, "zeroD_simulation")
+    if not os.path.exists(simulation_file):
+            os.makedirs(simulation_file)
+            print(f"Created filepath: {simulation_file}")
+    output_file = os.path.join(simulation_file, "zeroD_script.json")
+    clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
 
 
-carotid_left_flow = os.path.join(simulation_file, "LICA_smooth.dat")
-carotid_right_flow = os.path.join(simulation_file, "RICA_smooth.dat")
-vertebral_left_flow = os.path.join(simulation_file, "LVA_smooth.dat")
-vertebral_right_flow = os.path.join(simulation_file, "RVA_smooth.dat")
+    carotid_left_flow = os.path.join(simulation_file, "LICA_smooth.dat")
+    carotid_right_flow = os.path.join(simulation_file, "RICA_smooth.dat")
+    vertebral_left_flow = os.path.join(simulation_file, "LVA_smooth.dat")
+    vertebral_right_flow = os.path.join(simulation_file, "RVA_smooth.dat")
 
-flow_data = np.loadtxt(carotid_left_flow)
-tau_param = np.round(flow_data[-1, 0],3)
-print(f"tau: {tau_param}")
-mapping_dict = {
-    "SCA_L":4,
-    "PCA_L":5,
-    "MCA_L":6,
-    "ACA_L":7,
-    "ACA_R":8,
-    "MCA_R":9,
-    "PCA_R":10,
-    "SCA_R":11,
-}
+    flow_data = np.loadtxt(carotid_left_flow)
+    tau_param = np.round(flow_data[-1, 0],3)
+    print(f"tau: {tau_param}")
+    mapping_dict = {
+        "SCA_L":4,
+        "PCA_L":5,
+        "MCA_L":6,
+        "ACA_L":7,
+        "ACA_R":8,
+        "MCA_R":9,
+        "PCA_R":10,
+        "SCA_R":11,
+    }
 
-my_rcrs = get_initial_BC(clinical_data_file=clinical_data_file, patient_number=patient_number, mapping_dict = mapping_dict, tau=tau_param)
-my_flows = {
-    0: carotid_left_flow,
-    1: carotid_right_flow,
-    2: vertebral_left_flow,
-    3: vertebral_right_flow
-}
+    my_rcrs = get_initial_BC(clinical_data_file=clinical_data_file, patient_number=patient_number, mapping_dict = mapping_dict, tau=tau_param)
+    my_flows = {
+        0: carotid_left_flow,
+        1: carotid_right_flow,
+        2: vertebral_left_flow,
+        3: vertebral_right_flow
+    }
 
-segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs, tau=tau_param)
-#visualize_graph(segments, pos_to_node, inlet_nodes, outlet_nodes)
+    segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs, tau=tau_param)
+    #visualize_graph(segments, pos_to_node, inlet_nodes, outlet_nodes)
 
                           

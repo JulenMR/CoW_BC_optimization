@@ -13,8 +13,8 @@ class OptimizatorState:
         self.last_p_pulse = 0.0
         self.last_flow_errors = {}
         self.last_total_flow_err = 0.0
-        self.last_flows_sim = {}    # Nuevo: Guardar flujos simulados
-        self.last_flows_target = {} # Nuevo: Guardar flujos objetivo
+        self.last_flows_sim = {}    
+        self.last_flows_target = {} 
 
     def update_f(self, p_mean, p_pulse, flow_err_dict, total_err, sim_vals, target_vals):
         self.last_p_mean = p_mean
@@ -25,7 +25,6 @@ class OptimizatorState:
         self.last_flows_target = target_vals
 
 state = OptimizatorState()
-
 
 def update_all_outlets(json_dict, scaling_factors, base_params_list):
     bc_list = json_dict["boundary_conditions"]
@@ -57,7 +56,6 @@ def get_stats(df):
     return np.mean(p_means), np.mean(p_pulses), outlet_stats
 
 # OBJECTIVE FUNCTIONS  
-
 def objective_phase1(xk, base_params, json_dict, target_p, target_pulse):
     try:
         js = copy.deepcopy(json_dict)
@@ -87,15 +85,14 @@ def objective_phase2(xk, base_params, json_dict, target_flows, target_p, target_
         target_vals_log = {}
 
         for b_name, csv_name in BRANCH_MAP.items():
-            # CORRECCIÓN: Si clinical_flows ya tiene el *1000, no lo repitas aquí
             q_target = target_flows[csv_name] 
             q_sim = sim_flows[b_name]
             
-            # Error cuadrático relativo
+            # Mean squared error
             err_sq = ((q_sim - q_target) / q_target)**2
             flow_err_sum += err_sq
             
-            # Guardar para el estado (en porcentaje para humanos)
+            # Save the error percentage to visualize
             individual_errors[csv_name] = np.sqrt(err_sq) * 100
             sim_vals_log[csv_name] = q_sim
             target_vals_log[csv_name] = q_target
@@ -103,40 +100,38 @@ def objective_phase2(xk, base_params, json_dict, target_flows, target_p, target_
         p_penalty = 1.0 * ((p_mean - target_p) / target_p)**2
         pulse_penalty = 1.0 * ((p_pulse - target_pulse) / target_pulse)**2
         
-        # Actualizar estado con todos los datos
+        # Update state
         state.update_f(p_mean, p_pulse, individual_errors, 
                        np.mean(list(individual_errors.values())),
                        sim_vals_log, target_vals_log)
         
         return flow_err_sum + p_penalty + pulse_penalty
     except Exception as e: 
-        print(f"Error en simulación: {e}")
+        print(f"Simulation error: {e}")
         return 1e10
 
-# CALLBACKS LIGEROS
-
+# CALLBACKS
 def cb_p1(xk):
     state.iteration += 1
-    print(f"P1 | Iter {state.iteration:02d} -> P_mean: {state.last_p_mean:5.2f} | P_pulse: {state.last_p_pulse:5.2f}")
+    print(f"P1 | Iteration {state.iteration:02d} -> Mean pressure {state.last_p_mean:5.2f} | Pulse: {state.last_p_pulse:5.2f}")
 
 def cb_p2(xk):
     state.iteration += 1
-    # Solo imprimimos cada N iteraciones o todas si quieres detalle
-    print(f"\n{'='*60}")
-    print(f" ITERATION {state.iteration:02d} | Mean_error: {state.last_total_flow_err:5.2f}%")
-    print(f" P_avg: {state.last_p_mean:5.1f} | P_pulse: {state.last_p_pulse:5.1f}")
-    print(f"{'-'*60}")
+    print(f"\n{'='*55}")
+    print(f"P2 | Iteration {state.iteration:02} | Mean_error: {state.last_total_flow_err:5.2f}%")
+    print(f" Mean pressure: {state.last_p_mean:5.1f} | Pulse: {state.last_p_pulse:5.1f}")
+    print(f"{'-'*55}")
     print(f"{'Vessel':<12} | {'Simulated':>12} | {'Target':>12} | {'Error %':>8}")
-    print(f"{'-'*60}")
+    print(f"{'-'*55}")
     
     for name in sorted(state.last_flows_sim.keys()):
         sim = state.last_flows_sim[name]
         target = state.last_flows_target[name]
         err = state.last_flow_errors[name]
         print(f"{name:<12} | {sim:12.2f} | {target:12.2f} | {err:7.1f}%")
-    print(f"{'='*65}")
-# MAIN PIPELINE
+    print(f"{'='*55}")
 
+# Main function
 def run_optimization(json_path, target_p, target_pulse, clinical_flows, BRANCH_MAP):
     with open(json_path, 'r') as f: json_dict = json.load(f)
     
@@ -149,40 +144,21 @@ def run_optimization(json_path, target_p, target_pulse, clinical_flows, BRANCH_M
     # Phase 1: Pressure
     initial_guess = [1.0] * 24
     bounds1 = [(0.7, 3.0), (0.7, 5.0), (0.2, 5.0)] * 8
-    print(f"\n>>> STARTING PHASE 1: PRESSURE: MEAN: {target_p} | PULSE: {target_pulse}")
+    print(f"\n STARTING PHASE 1: Target mean pressure: {target_p:.2f} | Target pulse: {target_pulse:.2f}")
     state.iteration = 0
     res1 = minimize(objective_phase1, initial_guess, args=(base_params, json_dict, target_p, target_pulse),
                     method='L-BFGS-B', bounds=bounds1, callback=cb_p1, options={'ftol': 1e-3})
     
-
-
     # Phase 2: Flow split + Pressure maintenance
+    inlets = [0, 1, 2, 3]
+    OUTLET_BR_MAP = {f"branch{num}": label for label, num in BRANCH_MAP.items() if num not in inlets}
+
     bounds2 = [(0.8, 1.2), (0.5, 5.0), (0.1, 10.0)] * 8 
-    print("\n>>> STARTING PHASE 2: FLOW SPLIT & PRESSURE MAINTENANCE")
+    print("\n STARTING PHASE 2: Flow split + maintaining pressure values")
     state.iteration = 0
-    res2 = minimize(objective_phase2, res1.x, args=(base_params, json_dict, clinical_flows, target_p, target_pulse, BRANCH_MAP),
+    res2 = minimize(objective_phase2, res1.x, args=(base_params, json_dict, clinical_flows, target_p, target_pulse, OUTLET_BR_MAP),
                     method='L-BFGS-B', bounds=bounds2, callback=cb_p2, options={'ftol': 1e-4})
 
     final_json = copy.deepcopy(json_dict)
     update_all_outlets(final_json, res2.x, base_params)
     return final_json
-
-if __name__ == "__main__":
-    patient_number = 5
-    path_to_json = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models/zeroD_simulation/zeroD_script.json"
-    clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
-    output_json = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models/zeroD_simulation/zeroD_script_optimized_prueba.json"
-    mean_p, pulse, clinical_flows = get_clinical_data(file=clinical_data_file, p_number=patient_number)
-    iteration_count = 0
-
-    BRANCH_MAPPING = {
-    "branch4": "SCA_L", "branch5": "PCA_L", "branch6": "MCA_L", "branch7": "ACA_L",
-    "branch8": "ACA_R", "branch9": "MCA_R", "branch10": "PCA_R", "branch11": "SCA_R"
-    }
-
-
-    opt_json = run_optimization(path_to_json, mean_p, pulse, clinical_flows, BRANCH_MAPPING)
-    
-    with open(output_json, "w") as f:
-        json.dump(opt_json, f, indent=4)
-    print(f"\nOptimization finalized. JSON File saved in {output_json}")

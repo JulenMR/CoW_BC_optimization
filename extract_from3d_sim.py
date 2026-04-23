@@ -67,7 +67,6 @@ def reorder_legend(ax, order):
 surfaces_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Simulations/fine/5_zeroD_opt/mesh-complete/mesh-surfaces/"
 simulation_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Simulations/fine/5_zeroD_opt/122-procs/"
 cap_files = glob.glob(os.path.join(surfaces_dir, "cap_*.vtp"))
-# ... (mantener imports y funciones extract_3d_results_using_vtp y reorder_legend igual)
 
 # 1. Configuración de los 4 plots
 fig_f_in, ax_f_in = plt.subplots(figsize=(10, 6))

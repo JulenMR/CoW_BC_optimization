@@ -98,7 +98,7 @@ def centerline_merging(branch_files, tol_high, tol_low, input_model_file, output
 
     # Phase 4: Generate BranchIDs and Inflow/Outflow
     MASTER_INFLOWS = ["cap_L_ICA", "cap_R_ICA", "cap_L_VA", "cap_R_VA"]
-    MASTER_OUTFLOWS = ["cap_L_SCA", "cap_L_PCA", "cap_L_ICA_2", "cap_L_ACA", "cap_R_ACA", "cap_R_ICA_2", "cap_R_PCA", "cap_R_SCA"]
+    MASTER_OUTFLOWS = ["cap_L_SCA", "cap_L_PCA", "cap_L_MCA", "cap_L_ACA", "cap_R_ACA", "cap_R_MCA", "cap_R_PCA", "cap_R_SCA"]
 
     ID_OFFSET_OUTFLOWS = 4
     ID_OFFSET_INTERNAL = 12
@@ -109,14 +109,14 @@ def centerline_merging(branch_files, tol_high, tol_low, input_model_file, output
     mesh_orig = reader_mesh.GetOutput()
 
     target_centers = {}
-    print("\n Face center coordenates")
+    print("\nFace center coordenates")
     for name in MASTER_INFLOWS + MASTER_OUTFLOWS:
         fid = face_mapping.get(name)
         if fid:
             c = get_face_center(mesh_orig, "ModelFaceID", fid)
             if c:
                 target_centers[name] = np.array(c)
-                print(f"FACE {fid:<3} | {name:<30} : ({c[0]:.4f}, {c[1]:.4f}, {c[2]:.4f})")
+                print(f"FACE {fid:<3} | {name:<3} : ({c[0]:.4f}, {c[1]:.4f}, {c[2]:.4f})")
 
     final_net = vtk.vtkPolyData()
     final_net.SetPoints(poly_prepared.GetPoints())

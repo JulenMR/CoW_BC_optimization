@@ -19,9 +19,8 @@ for patient_number in patient_numbers:
 
     plt.figure(figsize=(12, 8))
 
-    # Parámetros para el header
-    N_POINTS_OUT = 100  # Reducimos a 100 puntos para que el solver sea más eficiente
-    FOURIER_MODES = 10
+    N_POINTS_OUT = 100  
+    FOURIER_MODES = 30
 
     for i, (label, path) in enumerate(flow_files.items()):
         if os.path.exists(path):
@@ -30,7 +29,6 @@ for patient_number in patient_numbers:
             time_pts = data[sort_idx, 0]
             flow_pts = np.abs(data[sort_idx, 1])
 
-            # ... (Tu lógica de puntos falsos y aumentados se mantiene igual)
             t_penult, t_last = time_pts[-2], time_pts[-1]
             f_penult, f_last = flow_pts[-2], flow_pts[-1]
             n_puntos_falsos = 2
@@ -55,16 +53,13 @@ for patient_number in patient_numbers:
             output_path_0d = os.path.join(simulation_file, f"{label}_0d_smooth.dat")
             
             with open(output_path_3d, 'w') as f:
-                # Escribimos el header: N_puntos, N_fourier
                 f.write(f"{N_POINTS_OUT},{FOURIER_MODES}\n")
-                # Escribimos los datos (SimVascular prefiere flujos negativos para Inlets)
                 for t, fl in zip(time_smooth, flow_smooth):
                     f.write(f"{t:.6e}\t{-abs(fl):.6e}\n") # Forzamos negativo por convención de entrada
             
-            # with open(output_path_0d, 'w') as f:
-            #     # Escribimos los datos (SimVascular prefiere flujos negativos para Inlets)
-            #     for t, fl in zip(time_smooth, flow_smooth):
-            #         f.write(f"{t:.6e}\t{-abs(fl):.6e}\n")
+            with open(output_path_0d, 'w') as f:
+                for t, fl in zip(time_smooth, flow_smooth):
+                    f.write(f"{t:.6e}\t{abs(fl):.6e}\n")
 
             # --- PLOT ---
             plt.subplot(2, 2, i+1)

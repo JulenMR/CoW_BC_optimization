@@ -11,11 +11,11 @@ import glob
 import time
 
 if __name__ == "__main__":
-    patient_number = 11
+    patient_number = 8
     start_time = time.time()
     og_dir = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models"
 
-    save_file = os.path.join(og_dir, "FULL_PIPELINE")
+    save_file = os.path.join(og_dir, "CENTERLINES")
     if not os.path.exists(save_file):
         os.makedirs(save_file)
         print(f"Created filepath: {save_file}")
@@ -38,39 +38,30 @@ if __name__ == "__main__":
     rest_files = [f for f in branch_files if "ACA" not in os.path.basename(f)]
 
     centerline_merging(branch_files=branch_files, input_model_file=input_file, output_file=final_centerline_file,
-                        face_mapping = face_mapping, tol_high=0.02, tol_low = 0.01, spatial_tolerance=2)
+                        face_mapping = face_mapping, tol_high=0.01, tol_low = 0.01, spatial_tolerance=2.5)
     
     # Phase 2: Generate JSON file
-    simulation_file = os.path.join(og_dir, "zeroD_simulation_2")
+    simulation_file = os.path.join(og_dir, "zeroD_simulation")
     if not os.path.exists(simulation_file):
             os.makedirs(simulation_file)
             print(f"Created filepath: {simulation_file}")    
 
     initial_json_file = os.path.join(simulation_file, "zeroD_script.json")
     clinical_flows_file = os.path.join(og_dir, f"ASL_BC_subject{patient_number}_FINAL.csv")
-    clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
+    clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/subject_targets.csv"
 
-    carotid_left_flow = os.path.join(og_dir, "LICA_smooth.dat")
-    carotid_right_flow = os.path.join(og_dir, "RICA_smooth.dat")
-    vertebral_left_flow = os.path.join(og_dir, "LVA_smooth.dat")
-    vertebral_right_flow = os.path.join(og_dir, "RVA_smooth.dat")
+    carotid_left_flow = os.path.join(simulation_file, "LICA_0d_smooth.dat")
+    carotid_right_flow = os.path.join(simulation_file, "RICA_0d_smooth.dat")
+    vertebral_left_flow = os.path.join(simulation_file, "LVA_0d_smooth.dat")
+    vertebral_right_flow = os.path.join(simulation_file, "RVA_0d_smooth.dat")
 
     flow_data = np.loadtxt(carotid_left_flow)
     tau_param = np.round(flow_data[-1, 0],3)
     print(f"tau: {tau_param}")
+
     mapping_dict = {
-        "ICA_L":0,
-        "ICA_R":1,
-        "VA_L":2,
-        "VA_R":3,
-        "SCA_L":4,
-        "PCA_L":5,
-        "MCA_L":6,
-        "ACA_L":7,
-        "ACA_R":8,
-        "MCA_R":9,
-        "PCA_R":10,
-        "SCA_R":11,
+        "L_ICA":0, "R_ICA":1, "L_VA":2, "R_VA":3, "L_SCA":4, "L_PCA":5,
+        "L_MCA":6, "L_ACA":7, "R_ACA":8, "R_MCA":9, "R_PCA":10, "R_SCA":11,
     }
 
     my_rcrs = get_initial_BC(clinical_data_file=clinical_data_file, patient_number=patient_number,
@@ -83,23 +74,14 @@ if __name__ == "__main__":
         3: vertebral_right_flow
     }
 
-    segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, initial_json_file, my_flows, my_rcrs, tau=tau_param)
+    segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(vtp_path= final_centerline_file, output_path = initial_json_file, 
+                                                                                    flow_files=my_flows, rcr_values=my_rcrs, tau=tau_param)
 
-    clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
     optimized_json = os.path.join(simulation_file, "zeroD_script_optimized.json")
     mean_p, pulse, clinical_flows  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
     iteration_count = 0
 
-    BRANCH_MAPPING = {
-    "branch0": "ICA_L", "branch1": "ICA_R", "branch2": "VA_L", "branch3": "VA_R", "branch4": "SCA_L", "branch5": "PCA_L", 
-    "branch6": "MCA_L", "branch7": "ACA_L", "branch8": "ACA_R", "branch9": "MCA_R", "branch10": "PCA_R", "branch11": "SCA_R"
-    }
-    BRANCH_MAPPING = {
-    "branch4": "SCA_L", "branch5": "PCA_L", "branch6": "MCA_L", "branch7": "ACA_L",
-    "branch8": "ACA_R", "branch9": "MCA_R", "branch10": "PCA_R", "branch11": "SCA_R"
-    }
-
-    opt_json = run_optimization(initial_json_file, mean_p, pulse, clinical_flows, BRANCH_MAPPING)
+    opt_json = run_optimization(initial_json_file, mean_p, pulse, clinical_flows, mapping_dict)
     
     with open(optimized_json, "w") as f:
         json.dump(opt_json, f, indent=4)
