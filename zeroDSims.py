@@ -10,28 +10,6 @@ import matplotlib.pyplot as plt
 import pickle
 from generate_json import get_clinical_data
 
-cap_names = sorted([
-        "L_SCA", "R_SCA", 
-        "L_PCA", "R_PCA", 
-        "L_MCA", "R_MCA", 
-        "L_ACA", "R_ACA", 
-        "L_ICA", "R_ICA", 
-        "L_VA", "R_VA"
-    ])
-
-inlets = ['branch0', 'branch1', 'branch2', 'branch3'] 
-outlets = ['branch4', 'branch5', 'branch6', 'branch7', 'branch8', 'branch9', 'branch10', 'branch11'] 
-total = inlets + outlets
-color_list = cm.get_cmap('tab10')(np.linspace(0, 1, len(cap_names)))
-COLOR_MAP = dict(zip(cap_names, color_list))
-BRANCH_MAPPING = {
-    "branch0": "L_ICA", "branch1": "R_ICA", "branch2": "L_VA", "branch3": "R_VA", "branch4": "L_SCA", "branch5": "L_PCA", 
-    "branch6": "L_MCA", "branch7": "L_ACA", "branch8": "R_ACA", "branch9": "R_MCA", "branch10": "R_PCA", "branch11": "R_SCA"
-    }
-
-order_idx = {name: i for i, name in enumerate(cap_names)}
-total_ordered = sorted(total, key=lambda b: order_idx.get(BRANCH_MAPPING[b], 99))
-
 def plot_combined_0d_3d_results(zeroD_json_filepath, filepath_3D, branchnames, parameter, mapping, title, save_path = None):
     
     # 1. Execute 0D simulation
@@ -62,7 +40,7 @@ def plot_combined_0d_3d_results(zeroD_json_filepath, filepath_3D, branchnames, p
         label_name = mapping[name]
         line_color = COLOR_MAP.get(label_name, "grey")
         
-        # --- 0D PLOT (Left Subplot) ---
+        # 0D PLOT
         branch_data_0d = df_zeroD[df_zeroD['name'] == name]
         if not branch_data_0d.empty:
             y_0d = branch_data_0d[parameter].values.copy()
@@ -70,22 +48,23 @@ def plot_combined_0d_3d_results(zeroD_json_filepath, filepath_3D, branchnames, p
             
             # Unit conversion
             if is_pressure:
-                y_0d /= 133.3 # Barye to mmHg
+                y_0d /= 133.3 
             else:
-                y_0d /= 1000.0 # mm3/s to mL/s
+                y_0d /= 1000.0 
 
             ax0.plot(t_0d, y_0d, label=label_name, linewidth=2, color=line_color)
             
-            # --- 3D PLOT (Right Subplot) ---
+            # 3D PLOT 
             if label_name in df_3d_last.columns:
                 y_3d = df_3d_last[label_name].values.copy()
                 
                 # Create a synthetic time axis for 3D results aligned with 0D cycle
                 t_3d = np.linspace(t_0d.min(), t_0d.max(), len(y_3d))
                 
-                if not is_pressure:
-                    # Use absolute value for flows (inlets are negative in SimVascular)
-                    y_3d = np.abs(y_3d)/1000.0 
+                if is_pressure:
+                    y_3d /= 133.3 
+                else:
+                    y_3d /= 1000.0 
                 
                 ax3.plot(t_3d, y_3d, label=label_name, linewidth=2, color=line_color)
             
@@ -96,27 +75,25 @@ def plot_combined_0d_3d_results(zeroD_json_filepath, filepath_3D, branchnames, p
         plt.close()
         return
 
-    # Left Subplot configuration (0D)
+    # 0D Subplot
     ax0.set_title(f"0D Solver: {parameter}")
     ax0.set_xlabel("Time (s)")
     ax0.set_ylabel(parameter + unit_label)
     ax0.grid(True, linestyle='--', alpha=0.5)
     ax0.legend(loc='upper right', fontsize='small', ncol=2)
 
-    # Right Subplot configuration (3D)
+    # 3D Subplot
     ax3.set_title(f"3D FSI: {parameter}")
     ax3.set_xlabel("Time (s)")
     ax3.grid(True, linestyle='--', alpha=0.5)
 
     # Main figure title
     plt.suptitle(title, fontsize=16)
-    # Adjust layout to prevent overlap with the main title
     plt.tight_layout(rect=[0, 0.03, 1, 0.95]) 
     
     if save_path:
         output_name = f"combined_0D_3D_{parameter}.png"
         plt.savefig(os.path.join(save_path, output_name), dpi=300)
-    
     plt.show()
 
 
@@ -186,29 +163,24 @@ def simulation_comparison(zeroD_filepath, optimized_3d_filepath, manual_3d_filep
     plt.figure(figsize=(16, 7))
 
     x = np.arange(len(df_plot))
-    width = 0.2  # Reduced width to fit 4 bars comfortably
+    width = 0.2 
 
-    # Adjusting X positions: -1.5w, -0.5w, 0.5w, 1.5w to center the group
     plt.bar(x - 1.5*width, df_plot['Clinical'],  width, label='Clinical target', color='#2ecc71', alpha=0.8)
     plt.bar(x - 0.5*width, df_plot['0D'],        width, label='0D simulation',  color='#3498db', alpha=0.8)
     plt.bar(x + 0.5*width, df_plot['Opt_3D'],    width, label='Optimized 3D',   color='#e74c3c', alpha=0.8)
     plt.bar(x + 1.5*width, df_plot['Manual_3D'], width, label='Manual 3D',      color='#f1c40f', alpha=0.8)
 
-    # Añadir etiquetas de error sobre las barras
     for i in range(len(df_plot)):
-        # Text for 0D error
         if not np.isnan(df_plot['0D'][i]):
             plt.text(x[i] - 0.5*width, df_plot['0D'][i] + 0.01, 
                      f"{df_plot['ZeroD_Err'][i]:.1f}%", 
                      ha='center', va='bottom', fontsize=8, fontweight='bold', color='black', rotation=0)
             
-        # Text for 3D optimization
         if not np.isnan(df_plot['Opt_3D'][i]):
             plt.text(x[i] + 0.5*width, df_plot['Opt_3D'][i] + 0.01, 
                      f"{df_plot['Opt_Err'][i]:.1f}%", 
                      ha='center', va='bottom', fontsize=8, fontweight='bold', color='black', rotation=0)
         
-        # Text for manual 3D
         if not np.isnan(df_plot['Manual_3D'][i]):
             plt.text(x[i] + 1.5*width, df_plot['Manual_3D'][i] + 0.01, 
                      f"{df_plot['Manual_Err'][i]:.1f}%", 
@@ -232,7 +204,23 @@ if __name__ == "__main__":
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/subject_targets.csv"
     save_path = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models/zeroD_simulation/"
 
-    # simulation_comparison(zeroD_filepath=zeroD_json_file, optimized_3d_filepath=opt_3d_result, manual_3d_filepath=manual_result_3d, 
-    #                       clinical_data_filepath=clinical_data_file)
-    plot_combined_0d_3d_results(zeroD_json_filepath = zeroD_json_file, filepath_3D = opt_3d_result, branchnames = inlets, 
-                                parameter = "flow_in", mapping = BRANCH_MAPPING, title = "PACS011 inlet compatison")
+    mapping_dict = {
+        "L_ICA":0, "R_ICA":1, "L_VA":2, "R_VA":3, "L_SCA":4, "L_PCA":5,
+        "L_MCA":6, "L_ACA":7, "R_ACA":8, "R_MCA":9, "R_PCA":10, "R_SCA":11,
+    }
+    
+    BRANCH_MAPPING = {f"branch{v}": k for k, v in mapping_dict.items()}
+
+    inlets = [f"branch{v}" for v in mapping_dict.values() if v <= 3]
+    outlets = [f"branch{v}" for v in mapping_dict.values() if v > 3]
+    total = inlets + outlets
+
+    colors = cm.get_cmap('tab20')(np.linspace(0, 1, len(mapping_dict)))
+    COLOR_MAP = dict(zip(mapping_dict.keys(), colors))
+
+    total_ordered = sorted(total, key=lambda b: mapping_dict[BRANCH_MAPPING[b]])
+
+    simulation_comparison(zeroD_filepath=zeroD_json_file, optimized_3d_filepath=opt_3d_result, manual_3d_filepath=manual_result_3d, 
+                          clinical_data_filepath=clinical_data_file)
+    plot_combined_0d_3d_results(zeroD_json_filepath = zeroD_json_file, filepath_3D = opt_3d_result, branchnames = total, 
+                                parameter = "pressure_out", mapping = BRANCH_MAPPING, title = "PACS011 inlet compatison")

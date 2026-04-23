@@ -253,20 +253,20 @@ def get_initial_BC(clinical_data_file, patient_number, mapping_dict, tau = 1.022
 if __name__ == "__main__":
 
     patient_number = 5
-    og_dir = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models"
-    centerlines = os.path.join(og_dir, "CENTERLINE", "centerline_final.vtp")
-    simulation_file = os.path.join(og_dir, "zeroD_simulation")
-    if not os.path.exists(simulation_file):
-            os.makedirs(simulation_file)
-            print(f"Created filepath: {simulation_file}")
-    output_file = os.path.join(simulation_file, "zeroD_script.json")
+    model_path = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models"
+    centerlines = os.path.join(model_path, "CENTERLINE", "centerline_final.vtp")
+    zeroD_simulation_file = os.path.join(model_path, "zeroD_simulation")
+    if not os.path.exists(zeroD_simulation_file):
+            os.makedirs(zeroD_simulation_file)
+            print(f"Created filepath: {zeroD_simulation_file}")
+    output_file = os.path.join(zeroD_simulation_file, "zeroD_script.json")
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
 
 
-    carotid_left_flow = os.path.join(simulation_file, "LICA_smooth.dat")
-    carotid_right_flow = os.path.join(simulation_file, "RICA_smooth.dat")
-    vertebral_left_flow = os.path.join(simulation_file, "LVA_smooth.dat")
-    vertebral_right_flow = os.path.join(simulation_file, "RVA_smooth.dat")
+    carotid_left_flow = os.path.join(zeroD_simulation_file, "LICA_smooth.dat")
+    carotid_right_flow = os.path.join(zeroD_simulation_file, "RICA_smooth.dat")
+    vertebral_left_flow = os.path.join(zeroD_simulation_file, "LVA_smooth.dat")
+    vertebral_right_flow = os.path.join(zeroD_simulation_file, "RVA_smooth.dat")
 
     flow_data = np.loadtxt(carotid_left_flow)
     tau_param = np.round(flow_data[-1, 0],3)
