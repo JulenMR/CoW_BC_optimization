@@ -90,11 +90,11 @@ if __name__ == "__main__":
     mean_p, pulse, clinical_flows  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
     iteration_count = 0
 
-    # opt_json = run_optimization(initial_json_file, mean_p, pulse, clinical_flows, mapping_dict)
+    opt_json = run_optimization(initial_json_file, mean_p, pulse, clinical_flows, mapping_dict)
     
-    # with open(optimized_json, "w") as f:
-    #     json.dump(opt_json, f, indent=4)
-    # print(f"\nOptimization finalized. JSON File saved in {optimized_json}")
+    with open(optimized_json, "w") as f:
+        json.dump(opt_json, f, indent=4)
+    print(f"\nOptimization finalized. JSON File saved in {optimized_json}")
 
     inp_path = os.path.join(original_flow_file, "svFSI.inp")
     inp_optimized_path = os.path.join(opt_3D_simulation_file, "svFSI_optimized.inp")
