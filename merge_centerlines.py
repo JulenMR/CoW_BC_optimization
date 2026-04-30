@@ -5,7 +5,7 @@ import pandas as pd
 from individual_centerline import get_face_center
 import os
 
-def centerline_merging(branch_files, tol_high, tol_low, input_model_file, output_file, face_mapping, spatial_tolerance=0.2):
+def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, output_file, face_mapping, spatial_tolerance=0.2):
 
     # Phase 1: Union and cleaning in 2 phases
     aca_files = [f for f in branch_files if "ACA" in os.path.basename(f)]
@@ -21,7 +21,7 @@ def centerline_merging(branch_files, tol_high, tol_low, input_model_file, output
 
     cleaner_general = vtk.vtkCleanPolyData()
     cleaner_general.SetInputData(append_general.GetOutput())
-    cleaner_general.SetTolerance(tol_high)
+    cleaner_general.SetTolerance(tol_general)
     cleaner_general.Update()
 
     # Final union with ACAs lower tolerance
@@ -39,7 +39,7 @@ def centerline_merging(branch_files, tol_high, tol_low, input_model_file, output
 
     final_cleaner = vtk.vtkCleanPolyData()
     final_cleaner.SetInputData(final_append.GetOutput())
-    final_cleaner.SetTolerance(tol_low) 
+    final_cleaner.SetTolerance(tol_aca) 
     final_cleaner.Update()
 
     # Clean duplicates

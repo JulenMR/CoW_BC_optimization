@@ -16,6 +16,10 @@ class OptimizatorState:
         self.last_flows_sim = {}    
         self.last_flows_target = {} 
 
+    def update_p(self, p_mean, p_pulse):
+        self.last_p_mean = p_mean
+        self.last_p_pulse = p_pulse
+
     def update_f(self, p_mean, p_pulse, flow_err_dict, total_err, sim_vals, target_vals):
         self.last_p_mean = p_mean
         self.last_p_pulse = p_pulse
@@ -26,58 +30,63 @@ class OptimizatorState:
 
 state = OptimizatorState()
 
-def update_all_outlets(json_dict, scaling_factors, base_params_list):
+def update_all_outlets(json_dict, scaling_factors, base_params_list, active_rcr_ids):
     bc_list = json_dict["boundary_conditions"]
-    for i in range(8): 
+    for i, rcr_id in enumerate(active_rcr_ids):
         idx = i * 3
         f_Rp, f_Rd, f_C = scaling_factors[idx : idx + 3]
-        target_bc_name = f"RCR_{i+4}"
+        target_bc_name = f"RCR_{rcr_id}"
+        
         for bc in bc_list:
             if bc.get("bc_name") == target_bc_name:
                 bc["bc_values"]["Rp"] = base_params_list[i]['Rp'] * f_Rp
                 bc["bc_values"]["Rd"] = base_params_list[i]['Rd'] * f_Rd
                 bc["bc_values"]["C"]  = base_params_list[i]['C']  * f_C
 
-def get_stats(df):
+def get_stats(df, active_rcr_ids):
     inlet_names = ["branch0", "branch1", "branch2", "branch3"]
     p_means, p_pulses = [], []
+    
+    available_branches = df['name'].unique()
     for name in inlet_names:
-        data = df[df['name'] == name]
-        p_vals = data["pressure_in"].values / 133.32 # mm-mg-s to mmHg
-        p_means.append(np.mean(p_vals))
-        p_pulses.append(np.max(p_vals) - np.min(p_vals))
+        if name in available_branches:
+            data = df[df['name'] == name]
+            p_vals = data["pressure_in"].values / 133.32
+            p_means.append(np.mean(p_vals))
+            p_pulses.append(np.max(p_vals) - np.min(p_vals))
     
     outlet_stats = {}
-    for i in range(4, 12):
-        name = f"branch{i}"
-        data = df[df['name'] == name]
-        outlet_stats[name] = np.mean(data["flow_out"].values)
+    for rcr_id in active_rcr_ids:
+        name = f"branch{rcr_id}"
+        if name in available_branches:
+            data = df[df['name'] == name]
+            outlet_stats[name] = np.mean(data["flow_out"].values)
         
     return np.mean(p_means), np.mean(p_pulses), outlet_stats
 
 # OBJECTIVE FUNCTIONS  
-def objective_phase1(xk, base_params, json_dict, target_p, target_pulse):
+def objective_phase1(xk, base_params, json_dict, target_p, target_pulse, active_rcr_ids):
     try:
         js = copy.deepcopy(json_dict)
-        update_all_outlets(js, xk, base_params)
+        update_all_outlets(js, xk, base_params, active_rcr_ids)
         solver = pysvzerod.Solver(js); solver.run()
         df = solver.get_full_result()
         
-        m, p, _ = get_stats(df)
+        m, p, _ = get_stats(df, active_rcr_ids)
         state.update_p(m, p)
         
         err = ((m - target_p)/target_p)**2 + ((p - target_pulse)/target_pulse)**2
         return err
     except: return 1e10
 
-def objective_phase2(xk, base_params, json_dict, target_flows, target_p, target_pulse, BRANCH_MAP):
+def objective_phase2(xk, base_params, json_dict, target_flows, target_p, target_pulse, BRANCH_MAP, active_rcr_ids):
     try:
         js = copy.deepcopy(json_dict)
-        update_all_outlets(js, xk, base_params)
+        update_all_outlets(js, xk, base_params, active_rcr_ids)
         solver = pysvzerod.Solver(js); solver.run()
         df = solver.get_full_result()
         
-        p_mean, p_pulse, sim_flows = get_stats(df)
+        p_mean, p_pulse, sim_flows = get_stats(df, active_rcr_ids)
         
         flow_err_sum = 0
         individual_errors = {}
@@ -85,6 +94,7 @@ def objective_phase2(xk, base_params, json_dict, target_flows, target_p, target_
         target_vals_log = {}
 
         for b_name, csv_name in BRANCH_MAP.items():
+            if b_name not in sim_flows: continue
             q_target = target_flows[csv_name] 
             q_sim = sim_flows[b_name]
             
@@ -136,29 +146,38 @@ def run_optimization(json_path, target_p, target_pulse, clinical_flows, BRANCH_M
     with open(json_path, 'r') as f: json_dict = json.load(f)
     
     base_params = []
+    active_rcr_ids = []
     for i in range(4, 12):
         bc_list = json_dict["boundary_conditions"]
-        params = next(bc["bc_values"] for bc in bc_list if bc.get("bc_name") == f"RCR_{i}")
-        base_params.append(copy.deepcopy(params))
+        branch_count = 0
+        try:
+            params = next(bc["bc_values"] for bc in bc_list if bc.get("bc_name") == f"RCR_{i}")
+            base_params.append(copy.deepcopy(params))
+            active_rcr_ids.append(i)
+        except StopIteration:
+            continue
+
+    branch_count = len(active_rcr_ids)
+    print(f"Active outlets found: {branch_count} ({active_rcr_ids})")
 
     # Phase 1: Pressure
-    initial_guess = [1.0] * 24
-    bounds1 = [(0.7, 3.0), (0.7, 5.0), (0.2, 5.0)] * 8
+    initial_guess = [1.0] * (3*branch_count)
+    bounds1 = [(0.7, 3.0), (0.7, 5.0), (0.2, 5.0)] * branch_count
     print(f"\n STARTING PHASE 1: Target mean pressure: {target_p:.2f} | Target pulse: {target_pulse:.2f}")
     state.iteration = 0
-    res1 = minimize(objective_phase1, initial_guess, args=(base_params, json_dict, target_p, target_pulse),
+    res1 = minimize(objective_phase1, initial_guess, args=(base_params, json_dict, target_p, target_pulse, active_rcr_ids),
                     method='L-BFGS-B', bounds=bounds1, callback=cb_p1, options={'ftol': 1e-3})
     
     # Phase 2: Flow split + Pressure maintenance
     inlets = [0, 1, 2, 3]
     OUTLET_BR_MAP = {f"branch{num}": label for label, num in BRANCH_MAP.items() if num not in inlets}
 
-    bounds2 = [(0.8, 1.2), (0.5, 5.0), (0.1, 10.0)] * 8 
+    bounds2 = [(0.8, 1.2), (0.5, 5.0), (0.1, 10.0)] * branch_count
     print("\n STARTING PHASE 2: Flow split + maintaining pressure values")
     state.iteration = 0
-    res2 = minimize(objective_phase2, res1.x, args=(base_params, json_dict, clinical_flows, target_p, target_pulse, OUTLET_BR_MAP),
+    res2 = minimize(objective_phase2, res1.x, args=(base_params, json_dict, clinical_flows, target_p, target_pulse, OUTLET_BR_MAP, active_rcr_ids),
                     method='L-BFGS-B', bounds=bounds2, callback=cb_p2, options={'ftol': 1e-4})
 
     final_json = copy.deepcopy(json_dict)
-    update_all_outlets(final_json, res2.x, base_params)
+    update_all_outlets(final_json, res2.x, base_params, active_rcr_ids)
     return final_json

@@ -13,7 +13,7 @@ import glob
 import time
 
 if __name__ == "__main__":
-    patient_number = 8
+    patient_number = 555
     start_time = time.time()
     model_path = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models"
     threeD_simulation_path = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Simulations/fine"
@@ -41,9 +41,9 @@ if __name__ == "__main__":
     rest_files = [f for f in branch_files if "ACA" not in os.path.basename(f)]
 
     centerline_merging(branch_files=branch_files, input_model_file=input_file, output_file=final_centerline_file,
-                        face_mapping = face_mapping, tol_high=0.01, tol_low = 0.01, spatial_tolerance=2.5)
+                        face_mapping = face_mapping, tol_general=0.01, tol_aca = 0.01, spatial_tolerance=3)
     
-    # Phase 2: Generate JSON file
+    # # Phase 2: Generate JSON file
     zeroD_simulation_file = os.path.join(model_path, "zeroD_simulation")
     if not os.path.exists(zeroD_simulation_file):
             os.makedirs(zeroD_simulation_file)
