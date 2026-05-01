@@ -3,8 +3,6 @@ import numpy as np
 import json
 import copy
 from scipy.optimize import minimize
-import pandas as pd
-from generate_json import get_clinical_data
 
 class OptimizatorState:
     def __init__(self):

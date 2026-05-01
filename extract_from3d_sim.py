@@ -52,10 +52,7 @@ def extract_3d_results_using_vtp(vtu_folder, vtp_outlet_path, time_step_size=0.0
     return times, pressures, flow 
 
 def reorder_legend(ax, order):
-    """
-    ax: El eje del plot
-    order: La lista con el orden deseado (ej. cap_names)
-    """
+
     handles, labels = ax.get_legend_handles_labels()
     dict_hl = dict(zip(labels, handles))
     
@@ -68,23 +65,19 @@ surfaces_dir = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_mo
 simulation_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Simulations/fine/5_zeroD_opt/122-procs/"
 cap_files = glob.glob(os.path.join(surfaces_dir, "cap_*.vtp"))
 
-# 1. Configuración de los 4 plots
 fig_f_in, ax_f_in = plt.subplots(figsize=(10, 6))
 fig_f_out, ax_f_out = plt.subplots(figsize=(10, 6))
 fig_p_in, ax_p_in = plt.subplots(figsize=(10, 6))
 fig_p_out, ax_p_out = plt.subplots(figsize=(10, 6))
 
-# Listas de categorías (ya las tenías)
 inlets = ["L_ICA", "R_ICA", "L_VA", "R_VA"]
 outlets = ["L_SCA", "R_SCA", "L_PCA", "R_PCA", "L_MCA", "R_MCA", "L_ACA", "R_ACA"]
 
-# Color Map (mantener igual)
 cap_names = sorted(inlets + outlets)
 color_list = cm.get_cmap('tab10')(np.linspace(0, 1, len(cap_names)))
 COLOR_MAP = dict(zip(cap_names, color_list))
 DEFAULT_COLOR = "yellow"
 
-# 2. Bucle de procesamiento
 for cap_path in cap_files:
     cap_name = os.path.basename(cap_path).replace('cap_', '').replace('.vtp', '')
     print(f"Processing: {cap_name}...")
@@ -98,7 +91,6 @@ for cap_path in cap_files:
     flow_ml_s = flow / 1000.0
     line_color = COLOR_MAP.get(cap_name, DEFAULT_COLOR)
 
-    # Lógica de asignación de plot
     if cap_name in inlets:
         ax_f_in.plot(times, flow_ml_s, label=cap_name, color=line_color, linewidth=2)
         ax_p_in.plot(times, pressures, label=cap_name, color=line_color, linewidth=2)
@@ -106,7 +98,6 @@ for cap_path in cap_files:
         ax_f_out.plot(times, flow_ml_s, label=cap_name, color=line_color, linewidth=2)
         ax_p_out.plot(times, pressures, label=cap_name, color=line_color, linewidth=2)
 
-# 3. Formateo, Ordenación de Leyenda y Guardado
 plots_info = [
     (fig_f_in, ax_f_in, "Inlet Flow", "Flow (mL/s)", "3D_flow_inlets.png"),
     (fig_f_out, ax_f_out, "Outlet Flow", "Flow (mL/s)", "3D_flow_outlets.png"),
@@ -120,9 +111,8 @@ for fig, ax, title, ylabel, filename in plots_info:
     ax.set_ylabel(ylabel)
     ax.grid(True, alpha=0.3)
     
-    # Ordenar leyenda usando tu función
     h, l = reorder_legend(ax, cap_names)
-    if h: # Solo si hay algo que mostrar
+    if h: 
         ax.legend(h, l, bbox_to_anchor=(1.05, 1), loc='upper left', fontsize='small')
     
     fig.savefig(os.path.join(simulation_file, filename), dpi=300, bbox_inches='tight')

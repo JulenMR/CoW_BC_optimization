@@ -24,7 +24,7 @@ if __name__ == "__main__":
         print(f"Created filepath: {centerlines_file}")
     
     input_file = os.path.join(model_path, "cow_super_coarse.vtp")
-    ModelFaceID_file = os.path.join(model_path, "cow.mdl")
+    ModelFaceID_file = os.path.join(model_path, "cow_og.mdl")
     final_centerline_file = os.path.join(centerlines_file, "centerline_final.vtp")
 
     # Face mapping
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/subject_targets.csv"
 
     # Inflow smoothing 
-    original_flow_file = os.path.join(threeD_simulation_path, "8_asl")
+    original_flow_file = os.path.join(threeD_simulation_path, f"{patient_number}_asl")
     opt_3D_simulation_file = os.path.join(threeD_simulation_path, f"{patient_number}_optimized_BC")
     if not os.path.exists(opt_3D_simulation_file):
             os.makedirs(opt_3D_simulation_file)

@@ -9,6 +9,7 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import pickle
 from generate_json import get_clinical_data
+import time
 
 def plot_combined_0d_3d_results(zeroD_json_filepath, filepath_3D, branchnames, parameter, mapping, title, save_path = None):
     
@@ -306,10 +307,19 @@ if __name__ == "__main__":
 
     total_ordered = sorted(total, key=lambda b: mapping_dict[BRANCH_MAPPING[b]])
 
-    check_and_plot_3d_continuity(manual_result_3d, mapping_dict)
+    #check_and_plot_3d_continuity(manual_result_3d, mapping_dict)
 
     # simulation_comparison(zeroD_filepath=zeroD_json_file, optimized_3d_filepath=opt_3d_result, manual_3d_filepath=manual_result_3d, 
     #                       patient_number= patient_number, clinical_data_filepath=clinical_data_file, save_path=save_path)
     
     # plot_combined_0d_3d_results(zeroD_json_filepath = zeroD_json_file, filepath_3D = opt_3d_result, branchnames = inlets, 
     #                             parameter = "flow_in", mapping = BRANCH_MAPPING, title = "PACS011 inlet comparison", save_path=None)
+    start_time = time.time()
+
+    zeroD_json = json.load(open(zeroD_json_file))
+    print("Executing 0D simulation")
+    solver = pysvzerod.Solver(zeroD_json)
+    solver.run()
+    df_zeroD = solver.get_full_result()
+    end_time = time.time()
+    print(f"Execution time: {end_time - start_time} seconds")
