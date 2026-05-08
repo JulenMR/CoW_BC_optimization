@@ -17,39 +17,31 @@ import time
 
 class VLikelihood(dists.ProbDist):
     def __init__(self, log_val):
-        # log_val ahora será un array de tamaño N
         self.log_val = np.atleast_1d(log_val)
-        self.dim = 1 # Dimensión del dato observado
-        
-
+        self.dim = 1 
+    
     def logpdf(self, x):
-        # x es el dato observado (data[t]), devolvemos el log_val guardado
         return self.log_val
     
 
 class RCR_UQ(ssm.StateSpaceModel):
-    def __init__(self, json_dict, active_rcr_ids, clinical_targets, branch_map, mapping_dict, **kwargs):
+    def __init__(self, json_dict, active_rcr_ids, clinical_targets, branch_map, lbfgs_vals, **kwargs):
         super().__init__(**kwargs)
         self.json_base = json_dict
         self.active_ids = active_rcr_ids
         self.targets = clinical_targets 
         self.branch_map = branch_map
-        self.mapping_dict = mapping_dict
         self.num_outlets = len(active_rcr_ids)
-        self.history = []
+        self.lbfgs_vals = lbfgs_vals
 
     def PX0(self): # Prior
         priors = []
-        for _ in range(self.num_outlets):
-            priors.extend([
-                dists.Uniform(0.1, 10.0),   # Rp
-                dists.Uniform(0.001, 0.8),  # C
-                dists.Uniform(0.5, 50.0)    # Rd
-            ])
+        for val in self.lbfgs_vals: # Prior is centered in the optimum value from lbfgs
+            priors.append(dists.LogNormal(mu=np.log(val), sigma=0.25))
         return dists.IndepProd(*priors)
 
     def PX(self, t, xp): # Constant parameters for Jitter
-        return dists.Normal(loc=xp, scale=1e-2)
+        return dists.Normal(loc=xp, scale=xp * 0.02)
 
     def PY(self, t, xp, x): # Likelihood
        
@@ -73,32 +65,24 @@ class RCR_UQ(ssm.StateSpaceModel):
             solver.run()
             df = solver.get_full_result()
             sim_mp, sim_pulse, sim_f = get_stats(df, self.active_ids)
-            record = {
-                'theta': theta.copy(),
-                'p_mean': sim_mp,
-                'p_pulse': sim_pulse,
-                'flows': list(sim_f.values())
-            }
-            self.history.append(record)
+            rel_errors = []
+        
+            for i, idx in enumerate(self.active_ids):
+                target = self.targets['flows'][list(self.branch_map.keys())[i]]
+                sim = sim_f[f"branch{idx}"]
+                rel_errors.append((sim - target) / target)
+                
+            # Pressure and pulse
+            rel_errors.append((sim_mp - self.targets['mean_p']) / self.targets['mean_p'])
+            rel_errors.append((sim_pulse - self.targets['pulse']) / self.targets['pulse'])
             
-            y_sim = [sim_f[f"branch{idx}"] for idx in self.active_ids if f"branch{idx}" in sim_f]
-            y_sim.append(sim_mp)
-            y_sim.append(sim_pulse)
+            # Compare error distribution with a normal with mean 0 and std 0.05
+            log_liks = stats.norm.logpdf(rel_errors, loc=0, scale=0.05)
             
-            y_target = [self.targets['flows'][name] for name in self.branch_map if f"branch{self.mapping_dict[name]}" in sim_f]
-            y_target.append(self.targets['mean_p'])
-            y_target.append(self.targets["pulse"])
+            # Extra weight to match pressure
+            log_liks[-2:] *= 15 
             
-            scales = [max(0.1, 0.1 * val) for val in y_target[:-2]] + [0.5, 0.1] 
-    
-            # 3. Calcular logprobs
-            log_probs = stats.norm.logpdf(y_target, loc=y_sim, scale=scales)
-            
-            # 4. BOOSTING: El pulso es 10 veces más importante que el resto
-            # Esto "estira" la montaña de probabilidad para que sea un pico afilado
-            log_probs[-1] *= 10 
-
-            return np.sum(log_probs)
+            return np.sum(log_liks)
         except:
             return -1e10
 
@@ -136,125 +120,74 @@ def get_stats(df, active_rcr_ids):
         
     return np.mean(p_means), np.mean(p_pulses), outlet_stats
 
-def result_visualization(result_npy, active_rcr_ids):
+def plot_corner_per_outlet(result_npy, active_rcr_ids, mapping_dict):
     samples = np.load(result_npy)
-
-    # 1. Corner Plot (Se mantiene igual, está perfecto)
-    params_outlet = samples[:, 0:3] 
+    id_to_name = {v: k for k, v in mapping_dict.items()}
     labels = ["$R_p$", "$C$", "$R_d$"]
-    fig = corner.corner(
-        params_outlet, 
-        labels=labels,
-        quantiles=[0.16, 0.5, 0.84], 
-        show_titles=True, 
-        title_kwargs={"fontsize": 12}
-    )
-    plt.show()
-
-    results_table = []
+    
     for i, rcr_id in enumerate(active_rcr_ids):
-        idx = i * 3
-        res = {
-            "Outlet": rcr_id,
-            "Rp_mean": np.mean(samples[:, idx]),
-            "Rp_std":  np.std(samples[:, idx]),
-            "C_mean":  np.mean(samples[:, idx+1]),
-            "C_std":   np.std(samples[:, idx+1]),
-            "Rd_mean": np.mean(samples[:, idx+2]),
-            "Rd_std":  np.std(samples[:, idx+2])
-        }
-        results_table.append(res)
+        # El índice en samples siempre será i*3
+        idx_start = i * 3
+        idx_end = idx_start + 3
+        params_subset = samples[:, idx_start:idx_end]
+        
+        vessel_name = id_to_name.get(rcr_id, f"ID_{rcr_id}")
+        
+        fig = corner.corner(
+            params_subset, 
+            labels=labels,
+            quantiles=[0.16, 0.5, 0.84], 
+            show_titles=True, 
+            title_kwargs={"fontsize": 12}
+        )
+        
+        fig.subplots_adjust(top=0.9) 
+        fig.suptitle(f"POSTERIOR DISTRIBUTION: {vessel_name}", 
+                     fontsize=16, 
+                     fontweight='bold',
+                     y=0.98)
+        
+        plt.show()
 
-    df_results = pd.DataFrame(results_table)
-    print(df_results)
-    #df_results.to_csv("summary_results_SMC.csv", index=False)
-
-def plot_all_parameters(result_npy, active_rcr_ids):
+def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
     samples = np.load(result_npy)
     num_outlets = len(active_rcr_ids)
     
-    # Creamos una figura grande: 3 filas (Rp, C, Rd) x N columnas (Outlets)
-    fig, axes = plt.subplots(3, num_outlets, figsize=(4 * num_outlets, 10), sharey=False)
+    id_to_name = {v: k for k, v in mapping_dict.items()}
     
-    param_names = ["Rp", "C", "Rd"]
-    colors = ["#3498db", "#e74c3c", "#2ecc71"] # Azul, Rojo, Verde
+    fig, axes = plt.subplots(3, num_outlets, figsize=(3 * num_outlets + 4, 10), sharey=False)
+    param_names = ["$R_p$", "$C$", "$R_d$"]
+    colors = ["blue", "red", "green"] 
 
     for row, p_name in enumerate(param_names):
         for col, rcr_id in enumerate(active_rcr_ids):
             ax = axes[row, col]
-            
-            # Índice de la columna en el array samples
-            # Si row=0 (Rp) -> idx = col*3 + 0
-            # Si row=1 (C)  -> idx = col*3 + 1
-            # Si row=2 (Rd) -> idx = col*3 + 2
             idx = col * 3 + row
             
             sns.kdeplot(samples[:, idx], ax=ax, fill=True, color=colors[row])
             
-            # Solo ponemos el título del outlet en la primera fila
             if row == 0:
-                ax.set_title(f"Outlet {rcr_id}", fontsize=14, fontweight='bold')
+                vessel_name = id_to_name.get(rcr_id, f"ID {rcr_id}")
+                ax.set_title(vessel_name, fontsize=15, fontweight='bold', pad=15)
             
-            # Solo ponemos el nombre del parámetro en la primera columna
             if col == 0:
-                ax.set_ylabel(p_name, fontsize=14, fontweight='bold')
+                ax.set_ylabel(p_name, fontsize=16, fontweight='bold', labelpad=20)
             else:
                 ax.set_ylabel("")
 
-            ax.tick_params(axis='x', rotation=45)
+            ax.tick_params(axis='x', rotation=30, labelsize=10)
+            ax.xaxis.set_major_locator(plt.MaxNLocator(4)) 
 
-    plt.suptitle("Distribuciones Posteriores por Parámetro y Outlet", fontsize=20, y=1.02)
-    plt.tight_layout()
-    #plt.savefig("full_parameter_distribution.png", bbox_inches='tight')
+    plt.suptitle("Posteriors for all parameters", 
+                 fontsize=22, fontweight='bold', y=0.98)
+    
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+    
+    # Ajuste fino final para los nombres de los parámetros en la izquierda
+    plt.subplots_adjust(left=0.1, wspace=0.3, hspace=0.5) 
+    
     plt.show()
 
-def diagnostic_random_particles(alg, rcr_model, n_samples=3):
-    """
-    Toma n partículas aleatorias del resultado final y muestra 
-    su desempeño real frente a los targets.
-    """
-    print(f"\n{'#'*60}")
-    print(f"{'# DIAGNÓSTICO DE PARTÍCULAS ALEATORIAS (POSTERIOR)':^58} #")
-    print(f"{'#'*60}")
-
-    # Seleccionar índices aleatorios
-    indices = np.random.choice(len(alg.X), n_samples, replace=False)
-    
-    for idx in indices:
-        theta = alg.X[idx]
-        
-        # Ejecutar simulación física
-        js = copy.deepcopy(rcr_model.json_base)
-        update_all_outlets(js, theta, rcr_model.active_ids)
-        
-        solver = pysvzerod.Solver(js)
-        solver.run()
-        df = solver.get_full_result()
-        
-        sim_mp, sim_pulse, sim_f = get_stats(df, rcr_model.active_ids)
-        
-        # Preparar datos para la tabla (mapeando nombres de vasos)
-        print(f"\n>>> PARTÍCULA INDEX: {idx}")
-        print(f"{'='*55}")
-        print(f" Mean pressure: {sim_mp:5.1f} (Target: {rcr_model.targets['mean_p']:5.1f})")
-        print(f" Pulse:         {sim_pulse:5.1f} (Target: {rcr_model.targets['pulse']:5.1f})")
-        print(f"{'-'*55}")
-        print(f"{'Vessel':<12} | {'Simulated':>12} | {'Target':>12} | {'Error %':>8}")
-        print(f"{'-'*55}")
-
-        total_err = 0
-        for name, branch_idx in rcr_model.branch_map.items():
-            b_key = f"branch{branch_idx}"
-            if b_key in sim_f:
-                sim = sim_f[b_key]
-                target = rcr_model.targets['flows'][name]
-                err_pct = abs(sim - target) / target * 100
-                total_err += err_pct
-                print(f"{name:<12} | {sim:12.2f} | {target:12.2f} | {err_pct:7.1f}%")
-        
-        print(f"{'-'*55}")
-        print(f"Mean Flow Error: {total_err/len(sim_f):5.2f}%")
-        print(f"{'='*55}\n")
 
 if __name__ == "__main__":
     start_time = time.time()
@@ -268,53 +201,58 @@ if __name__ == "__main__":
 
     with open(json_path, 'r') as f: json_dict = json.load(f)
     active_rcr_ids = []
+    deterministic_param_values = []
     for i in range(4, 12):
         bc_list = json_dict["boundary_conditions"]
         branch_count = 0
         try:
             params = next(bc["bc_values"] for bc in bc_list if bc.get("bc_name") == f"RCR_{i}")
+            for n, val in enumerate(params.values()):
+                if n < 3:
+                  deterministic_param_values.append(round(val,6))
             active_rcr_ids.append(i)
         except StopIteration:
             continue
 
     branch_count = len(active_rcr_ids)
     print(f"Active outlets found: {branch_count} ({active_rcr_ids})")
+    print(f"parameter list: {deterministic_param_values}")
 
     mean_p, pulse, clinical_flows  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
     targets = {"mean_p": mean_p,
                "pulse": pulse,
                "flows": clinical_flows}
     
-    rcr_model = RCR_UQ(json_dict=json_dict, 
-                       active_rcr_ids=active_rcr_ids, 
-                       clinical_targets=targets, 
-                       branch_map=mapping_dict, 
-                       mapping_dict=mapping_dict)
+    # rcr_model = RCR_UQ(json_dict=json_dict, 
+    #                    active_rcr_ids=active_rcr_ids, 
+    #                    clinical_targets=targets, 
+    #                    branch_map=mapping_dict, 
+    #                    lbfgs_vals = deterministic_param_values)
 
-    fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
+    # fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
 
-    N_particles = 200
+    # N_particles = 2000
     
-    print(f"Executing multiSMC in parallel...")
+    # print(f"Executing multiSMC in parallel...")
 
-    results = particles.multiSMC(fk=fk_boot, 
-                                 N=N_particles, 
-                                 nruns=1, 
-                                 nprocs=16, 
-                                 out_func=None)
+    # results = particles.multiSMC(fk=fk_boot, 
+    #                              N=N_particles, 
+    #                              nruns=1, 
+    #                              nprocs=16, 
+    #                              out_func=None)
 
 
-    alg = results[0]['output']
-    diagnostic_random_particles(alg, rcr_model, n_samples=3)
+    # alg = results[0]['output']
+    # diagnostic_random_particles(alg, rcr_model, n_samples=3)
 
-    np.save(f"particles_patient_{patient_number}.npy", alg.X)
-    end_time = time.time()
-    print(f"Execution time: {end_time - start_time} seconds")
+    # np.save(f"particles_patient_{patient_number}.npy", alg.X)
+    # end_time = time.time()
+    # print(f"Execution time: {end_time - start_time} seconds")
     
-    print(f"SMC was successfull. {alg.X.shape[0]} samples for {alg.X.shape[1]} parameters have been created.")
+    # print(f"SMC was successfull. {alg.X.shape[0]} samples for {alg.X.shape[1]} parameters have been created.")
 
-    result_visualization("particles_patient_5.npy", active_rcr_ids)
-    plot_all_parameters("particles_patient_5.npy", active_rcr_ids)
+#plot_corner_per_outlet("particles_patient_5.npy", active_rcr_ids, mapping_dict)
+plot_all_parameters("particles_patient_5.npy", active_rcr_ids, mapping_dict)
 
     
 
