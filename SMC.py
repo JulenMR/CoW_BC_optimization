@@ -22,7 +22,6 @@ class VLikelihood(dists.ProbDist):
     
     def logpdf(self, x):
         return self.log_val
-    
 
 class RCR_UQ(ssm.StateSpaceModel):
     def __init__(self, json_dict, active_rcr_ids, clinical_targets, branch_map, lbfgs_vals, **kwargs):
@@ -34,10 +33,21 @@ class RCR_UQ(ssm.StateSpaceModel):
         self.num_outlets = len(active_rcr_ids)
         self.lbfgs_vals = lbfgs_vals
 
+    # def PX0(self): # Prior
+    #     priors = []
+    #     for val in self.lbfgs_vals: # Prior is centered in the optimum value from lbfgs
+    #         priors.append(dists.LogNormal(mu=np.log(val), sigma=0.25))
+    #     return dists.IndepProd(*priors)
+    
     def PX0(self): # Prior
         priors = []
-        for val in self.lbfgs_vals: # Prior is centered in the optimum value from lbfgs
-            priors.append(dists.LogNormal(mu=np.log(val), sigma=0.25))
+        for _ in range(self.num_outlets):
+            priors.extend([
+                dists.Uniform(0.1, 10.0),   # Rp
+                dists.Uniform(0.001, 0.5),  # C
+                dists.Uniform(0.001, 0.8),  # C
+                dists.Uniform(0.5, 50.0)    # Rd
+            ])
         return dists.IndepProd(*priors)
 
     def PX(self, t, xp): # Constant parameters for Jitter
@@ -126,7 +136,6 @@ def plot_corner_per_outlet(result_npy, active_rcr_ids, mapping_dict):
     labels = ["$R_p$", "$C$", "$R_d$"]
     
     for i, rcr_id in enumerate(active_rcr_ids):
-        # El índice en samples siempre será i*3
         idx_start = i * 3
         idx_end = idx_start + 3
         params_subset = samples[:, idx_start:idx_end]
@@ -155,38 +164,57 @@ def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
     
     id_to_name = {v: k for k, v in mapping_dict.items()}
     
-    fig, axes = plt.subplots(3, num_outlets, figsize=(3 * num_outlets + 3, 10), sharey=False)
+    fig, axes = plt.subplots(3, num_outlets, figsize=(4 * num_outlets, 12), sharey=False)
     param_names = ["$R_p$", "$C$", "$R_d$"]
-    colors = ["blue", "red", "green"] 
+    colors = ["#1f77b4", "#d62728", "#2ca02c"] 
 
     for row, p_name in enumerate(param_names):
         for col, rcr_id in enumerate(active_rcr_ids):
             ax = axes[row, col]
             idx = col * 3 + row
+            data = samples[:, idx]
             
-            sns.kdeplot(samples[:, idx], ax=ax, fill=True, color=colors[row])
+            # Cálculo de estadísticas
+            p5 = np.percentile(data, 5)
+            p95 = np.percentile(data, 95)
+            media = np.mean(data)
             
+            # Dibujar KDE
+            sns.kdeplot(data, ax=ax, fill=True, color=colors[row], alpha=0.4)
+            
+            # Líneas verticales
+            ax.axvline(p5, color='black', linestyle=':', linewidth=1.5, alpha=0.6)
+            ax.axvline(p95, color='black', linestyle=':', linewidth=1.5, alpha=0.6)
+            ax.axvline(media, color='black', linestyle='-', linewidth=1.5)
+
+            # --- NUEVA LÓGICA DE EJE X ---
+            # Definimos los ticks exactamente en los valores de interés
+            ticks = [p5, media, p95]
+            ax.set_xticks(ticks)
+            
+            # Formateamos las etiquetas para que no sean excesivamente largas (notación científica si es necesario)
+            labels = [f"{p5:.3f}", f"{media:.3f}", f"{p95:.3f}"]
+            ax.set_xticklabels(labels, rotation=45, fontsize=9)
+
             if row == 0:
                 vessel_name = id_to_name.get(rcr_id, f"ID {rcr_id}")
-                ax.set_title(vessel_name, fontsize=15, fontweight='bold', pad=15)
+                ax.set_title(vessel_name, fontsize=15, fontweight='bold', pad=20)
             
             if col == 0:
                 ax.set_ylabel(p_name, fontsize=16, fontweight='bold', labelpad=20)
             else:
                 ax.set_ylabel("")
 
-            ax.tick_params(axis='x', rotation=30, labelsize=10)
-            ax.xaxis.set_major_locator(plt.MaxNLocator(4)) 
+            # Limpiamos el grid para que no estorbe a los nuevos ticks
+            ax.grid(axis='x', linestyle='--', alpha=0.3)
 
-    plt.suptitle("Posteriors for all parameters", 
+    plt.suptitle("Posteriors: Mean, 5th & 95th Percentiles", 
                  fontsize=22, fontweight='bold', y=0.98)
     
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    
-    plt.subplots_adjust(left=0.06, wspace=0.3, hspace=0.5) 
+    plt.subplots_adjust(left=0.08, wspace=0.4, hspace=0.6) 
     
     plt.show()
-
 
 if __name__ == "__main__":
     start_time = time.time()
@@ -222,36 +250,35 @@ if __name__ == "__main__":
                "pulse": pulse,
                "flows": clinical_flows}
     
-    # rcr_model = RCR_UQ(json_dict=json_dict, 
-    #                    active_rcr_ids=active_rcr_ids, 
-    #                    clinical_targets=targets, 
-    #                    branch_map=mapping_dict, 
-    #                    lbfgs_vals = deterministic_param_values)
+    rcr_model = RCR_UQ(json_dict=json_dict, 
+                       active_rcr_ids=active_rcr_ids, 
+                       clinical_targets=targets, 
+                       branch_map=mapping_dict, 
+                       lbfgs_vals = deterministic_param_values)
 
-    # fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
+    fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
 
-    # N_particles = 2000
+    N_particles = 200
     
-    # print(f"Executing multiSMC in parallel...")
+    print(f"Executing multiSMC in parallel...")
 
-    # results = particles.multiSMC(fk=fk_boot, 
-    #                              N=N_particles, 
-    #                              nruns=1, 
-    #                              nprocs=16, 
-    #                              out_func=None)
+    results = particles.multiSMC(fk=fk_boot, 
+                                 N=N_particles, 
+                                 nruns=1, 
+                                 nprocs=16, 
+                                 out_func=None)
 
 
-    # alg = results[0]['output']
-    # diagnostic_random_particles(alg, rcr_model, n_samples=3)
+    alg = results[0]['output']
 
-    # np.save(f"particles_patient_{patient_number}.npy", alg.X)
-    # end_time = time.time()
-    # print(f"Execution time: {end_time - start_time} seconds")
+    np.save(f"particles_old_patient_{patient_number}.npy", alg.X)
+    end_time = time.time()
+    print(f"Execution time: {end_time - start_time} seconds")
     
-    # print(f"SMC was successfull. {alg.X.shape[0]} samples for {alg.X.shape[1]} parameters have been created.")
+    print(f"SMC was successfull. {alg.X.shape[0]} samples for {alg.X.shape[1]} parameters have been created.")
 
 #plot_corner_per_outlet("particles_patient_5.npy", active_rcr_ids, mapping_dict)
-plot_all_parameters("particles_patient_5.npy", active_rcr_ids, mapping_dict)
+plot_all_parameters("particles_old_patient_5.npy", active_rcr_ids, mapping_dict)
 
     
 
