@@ -155,7 +155,7 @@ def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
     
     id_to_name = {v: k for k, v in mapping_dict.items()}
     
-    fig, axes = plt.subplots(3, num_outlets, figsize=(3 * num_outlets + 4, 10), sharey=False)
+    fig, axes = plt.subplots(3, num_outlets, figsize=(3 * num_outlets + 3, 10), sharey=False)
     param_names = ["$R_p$", "$C$", "$R_d$"]
     colors = ["blue", "red", "green"] 
 
@@ -183,8 +183,7 @@ def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
     
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     
-    # Ajuste fino final para los nombres de los parámetros en la izquierda
-    plt.subplots_adjust(left=0.1, wspace=0.3, hspace=0.5) 
+    plt.subplots_adjust(left=0.06, wspace=0.3, hspace=0.5) 
     
     plt.show()
 
