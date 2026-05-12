@@ -33,23 +33,12 @@ class RCR_UQ(ssm.StateSpaceModel):
         self.num_outlets = len(active_rcr_ids)
         self.lbfgs_vals = lbfgs_vals
 
-    # def PX0(self): # Prior
-    #     priors = []
-    #     for val in self.lbfgs_vals: # Prior is centered in the optimum value from lbfgs
-    #         priors.append(dists.LogNormal(mu=np.log(val), sigma=0.25))
-    #     return dists.IndepProd(*priors)
-    
     def PX0(self): # Prior
         priors = []
-        for _ in range(self.num_outlets):
-            priors.extend([
-                dists.Uniform(0.1, 10.0),   # Rp
-                dists.Uniform(0.001, 0.5),  # C
-                dists.Uniform(0.001, 0.8),  # C
-                dists.Uniform(0.5, 50.0)    # Rd
-            ])
+        for val in self.lbfgs_vals: # Prior is centered in the optimum value from lbfgs
+            priors.append(dists.LogNormal(mu=np.log(val), sigma=0.25))
         return dists.IndepProd(*priors)
-
+    
     def PX(self, t, xp): # Constant parameters for Jitter
         return dists.Normal(loc=xp, scale=xp * 0.02)
 
@@ -174,7 +163,6 @@ def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
             idx = col * 3 + row
             data = samples[:, idx]
             
-            # Cálculo de estadísticas
             p5 = np.percentile(data, 5)
             p95 = np.percentile(data, 95)
             media = np.mean(data)
@@ -187,12 +175,9 @@ def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
             ax.axvline(p95, color='black', linestyle=':', linewidth=1.5, alpha=0.6)
             ax.axvline(media, color='black', linestyle='-', linewidth=1.5)
 
-            # --- NUEVA LÓGICA DE EJE X ---
-            # Definimos los ticks exactamente en los valores de interés
             ticks = [p5, media, p95]
             ax.set_xticks(ticks)
             
-            # Formateamos las etiquetas para que no sean excesivamente largas (notación científica si es necesario)
             labels = [f"{p5:.3f}", f"{media:.3f}", f"{p95:.3f}"]
             ax.set_xticklabels(labels, rotation=45, fontsize=9)
 
@@ -205,7 +190,6 @@ def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
             else:
                 ax.set_ylabel("")
 
-            # Limpiamos el grid para que no estorbe a los nuevos ticks
             ax.grid(axis='x', linestyle='--', alpha=0.3)
 
     plt.suptitle("Posteriors: Mean, 5th & 95th Percentiles", 
@@ -215,6 +199,7 @@ def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
     plt.subplots_adjust(left=0.08, wspace=0.4, hspace=0.6) 
     
     plt.show()
+
 
 if __name__ == "__main__":
     start_time = time.time()
@@ -250,35 +235,36 @@ if __name__ == "__main__":
                "pulse": pulse,
                "flows": clinical_flows}
     
-    rcr_model = RCR_UQ(json_dict=json_dict, 
-                       active_rcr_ids=active_rcr_ids, 
-                       clinical_targets=targets, 
-                       branch_map=mapping_dict, 
-                       lbfgs_vals = deterministic_param_values)
+    # rcr_model = RCR_UQ(json_dict=json_dict, 
+    #                    active_rcr_ids=active_rcr_ids, 
+    #                    clinical_targets=targets, 
+    #                    branch_map=mapping_dict, 
+    #                    lbfgs_vals = deterministic_param_values)
 
-    fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
+    # fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
 
-    N_particles = 200
+    # N_particles = 2000
     
-    print(f"Executing multiSMC in parallel...")
+    # print(f"Executing multiSMC in parallel...")
 
-    results = particles.multiSMC(fk=fk_boot, 
-                                 N=N_particles, 
-                                 nruns=1, 
-                                 nprocs=16, 
-                                 out_func=None)
+    # results = particles.multiSMC(fk=fk_boot, 
+    #                              N=N_particles, 
+    #                              nruns=1, 
+    #                              nprocs=16, 
+    #                              out_func=None)
 
 
-    alg = results[0]['output']
+    # alg = results[0]['output']
+    # diagnostic_random_particles(alg, rcr_model, n_samples=3)
 
-    np.save(f"particles_old_patient_{patient_number}.npy", alg.X)
-    end_time = time.time()
-    print(f"Execution time: {end_time - start_time} seconds")
+    # np.save(f"particles_patient_{patient_number}.npy", alg.X)
+    # end_time = time.time()
+    # print(f"Execution time: {end_time - start_time} seconds")
     
-    print(f"SMC was successfull. {alg.X.shape[0]} samples for {alg.X.shape[1]} parameters have been created.")
+    # print(f"SMC was successfull. {alg.X.shape[0]} samples for {alg.X.shape[1]} parameters have been created.")
 
 #plot_corner_per_outlet("particles_patient_5.npy", active_rcr_ids, mapping_dict)
-plot_all_parameters("particles_old_patient_5.npy", active_rcr_ids, mapping_dict)
+#plot_all_parameters("particles_patient_5.npy", active_rcr_ids, mapping_dict)
 
     
 

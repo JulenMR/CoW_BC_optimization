@@ -8,3 +8,4 @@ SMC_results/
 .vscode/
 
 zeroDSims.py
+extract_from3d_sim.py
