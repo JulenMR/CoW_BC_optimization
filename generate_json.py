@@ -215,14 +215,20 @@ def get_clinical_data(file, p_number):
     for artery, flow in flow_dict.items():
         print(f"{artery:<15} | {flow:>15.2f}")
     print("-" * 40 + "\n")
+
+    clinical_data = {
+        "mean_p": map_pressure,
+        "pulse": pulse_pressure,
+        "flows": flow_dict,
+    }
     
-    return map_pressure, pulse_pressure, flow_dict
+    return clinical_data
 
 
 def get_initial_BC(clinical_data_file, patient_number, mapping_dict, tau = 1.022):
     my_rcrs = {}
-    p_mean,_, flow_dict = get_clinical_data(file=clinical_data_file, p_number=patient_number)
-
+    clinical_data = get_clinical_data(file=clinical_data_file, p_number=patient_number)
+    p_mean, _, flow_dict = clinical_data["mean_p"], clinical_data["pulse"], clinical_data["flows"]
     for region_name, branch_id in mapping_dict.items():
         if region_name in flow_dict:
             q_mean = flow_dict[region_name]

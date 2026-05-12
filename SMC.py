@@ -24,7 +24,7 @@ class VLikelihood(dists.ProbDist):
         return self.log_val
 
 class RCR_UQ(ssm.StateSpaceModel):
-    def __init__(self, json_dict, active_rcr_ids, clinical_targets, branch_map, lbfgs_vals, **kwargs):
+    def __init__(self, json_dict, active_rcr_ids, clinical_targets, branch_map, lbfgs_vals, error_tolerance, **kwargs):
         super().__init__(**kwargs)
         self.json_base = json_dict
         self.active_ids = active_rcr_ids
@@ -32,6 +32,7 @@ class RCR_UQ(ssm.StateSpaceModel):
         self.branch_map = branch_map
         self.num_outlets = len(active_rcr_ids)
         self.lbfgs_vals = lbfgs_vals
+        self.error_tolerance = error_tolerance
 
     def PX0(self): # Prior
         priors = []
@@ -76,7 +77,7 @@ class RCR_UQ(ssm.StateSpaceModel):
             rel_errors.append((sim_pulse - self.targets['pulse']) / self.targets['pulse'])
             
             # Compare error distribution with a normal with mean 0 and std 0.05
-            log_liks = stats.norm.logpdf(rel_errors, loc=0, scale=0.05)
+            log_liks = stats.norm.logpdf(rel_errors, loc=0, scale=self.error_tolerance)
             
             # Extra weight to match pressure
             log_liks[-2:] *= 15 
@@ -201,70 +202,70 @@ def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
     plt.show()
 
 
-if __name__ == "__main__":
-    start_time = time.time()
-    patient_number = 5
-    clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/subject_targets.csv"
-    json_path = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_optimized.json"
-    mapping_dict = {
-        "L_ICA":0, "R_ICA":1, "L_VA":2, "R_VA":3, "L_SCA":4, "L_PCA":5,
-        "L_MCA":6, "L_ACA":7, "R_ACA":8, "R_MCA":9, "R_PCA":10, "R_SCA":11,
-    }
+# if __name__ == "__main__":
 
-    with open(json_path, 'r') as f: json_dict = json.load(f)
-    active_rcr_ids = []
-    deterministic_param_values = []
-    for i in range(4, 12):
-        bc_list = json_dict["boundary_conditions"]
-        branch_count = 0
-        try:
-            params = next(bc["bc_values"] for bc in bc_list if bc.get("bc_name") == f"RCR_{i}")
-            for n, val in enumerate(params.values()):
-                if n < 3:
-                  deterministic_param_values.append(round(val,6))
-            active_rcr_ids.append(i)
-        except StopIteration:
-            continue
+#     start_time = time.time()
+#     patient_number = 5
+#     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/subject_targets.csv"
+#     json_path = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-005/Models/zeroD_simulation/zeroD_script_optimized.json"
+#     mapping_dict = {
+#         "L_ICA":0, "R_ICA":1, "L_VA":2, "R_VA":3, "L_SCA":4, "L_PCA":5,
+#         "L_MCA":6, "L_ACA":7, "R_ACA":8, "R_MCA":9, "R_PCA":10, "R_SCA":11,
+#     }
 
-    branch_count = len(active_rcr_ids)
-    print(f"Active outlets found: {branch_count} ({active_rcr_ids})")
-    print(f"parameter list: {deterministic_param_values}")
+#     with open(json_path, 'r') as f: json_dict = json.load(f)
+#     active_rcr_ids = []
+#     deterministic_param_values = []
+#     for i in range(4, 12):
+#         bc_list = json_dict["boundary_conditions"]
+#         branch_count = 0
+#         try:
+#             params = next(bc["bc_values"] for bc in bc_list if bc.get("bc_name") == f"RCR_{i}")
+#             for n, val in enumerate(params.values()):
+#                 if n < 3:
+#                   deterministic_param_values.append(round(val,6))
+#             active_rcr_ids.append(i)
+#         except StopIteration:
+#             continue
 
-    mean_p, pulse, clinical_flows  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
-    targets = {"mean_p": mean_p,
-               "pulse": pulse,
-               "flows": clinical_flows}
+#     branch_count = len(active_rcr_ids)
+#     print(f"Active outlets found: {branch_count} ({active_rcr_ids})")
+#     print(f"parameter list: {deterministic_param_values}")
+
+#     mean_p, pulse, clinical_flows  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
+#     targets = {"mean_p": mean_p,
+#                "pulse": pulse,
+#                "flows": clinical_flows}
     
-    # rcr_model = RCR_UQ(json_dict=json_dict, 
-    #                    active_rcr_ids=active_rcr_ids, 
-    #                    clinical_targets=targets, 
-    #                    branch_map=mapping_dict, 
-    #                    lbfgs_vals = deterministic_param_values)
+#     rcr_model = RCR_UQ(json_dict=json_dict, 
+#                        active_rcr_ids=active_rcr_ids, 
+#                        clinical_targets=targets, 
+#                        branch_map=mapping_dict, 
+#                        lbfgs_vals = deterministic_param_values)
 
-    # fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
+#     fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
 
-    # N_particles = 2000
+#     N_particles = 2000
     
-    # print(f"Executing multiSMC in parallel...")
+#     print(f"Executing multiSMC in parallel...")
 
-    # results = particles.multiSMC(fk=fk_boot, 
-    #                              N=N_particles, 
-    #                              nruns=1, 
-    #                              nprocs=16, 
-    #                              out_func=None)
+#     results = particles.multiSMC(fk=fk_boot, 
+#                                  N=N_particles, 
+#                                  nruns=1, 
+#                                  nprocs=16, 
+#                                  out_func=None)
 
 
-    # alg = results[0]['output']
-    # diagnostic_random_particles(alg, rcr_model, n_samples=3)
+#     alg = results[0]['output']
 
-    # np.save(f"particles_patient_{patient_number}.npy", alg.X)
-    # end_time = time.time()
-    # print(f"Execution time: {end_time - start_time} seconds")
+#     np.save(f"particles_patient_{patient_number}.npy", alg.X)
+#     end_time = time.time()
+#     print(f"Execution time: {end_time - start_time} seconds")
     
-    # print(f"SMC was successfull. {alg.X.shape[0]} samples for {alg.X.shape[1]} parameters have been created.")
+#     print(f"SMC was successfull. {alg.X.shape[0]} samples for {alg.X.shape[1]} parameters have been created.")
 
-#plot_corner_per_outlet("particles_patient_5.npy", active_rcr_ids, mapping_dict)
-#plot_all_parameters("particles_patient_5.npy", active_rcr_ids, mapping_dict)
+# plot_corner_per_outlet("particles_patient_5.npy", active_rcr_ids, mapping_dict)
+# plot_all_parameters("particles_patient_5.npy", active_rcr_ids, mapping_dict)
 
     
 

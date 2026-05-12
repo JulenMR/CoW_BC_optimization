@@ -140,7 +140,8 @@ def cb_p2(xk):
     print(f"{'='*55}")
 
 # Main function
-def run_optimization(json_path, target_p, target_pulse, clinical_flows, BRANCH_MAP):
+def run_optimization(json_path, target_clinical_data, BRANCH_MAP):
+    target_p, target_pulse, clinical_flows = target_clinical_data["mean_p"], target_clinical_data["pulse"], target_clinical_data["flows"]
     with open(json_path, 'r') as f: json_dict = json.load(f)
     
     base_params = []
