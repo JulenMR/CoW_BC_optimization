@@ -1,0 +1,10 @@
+__pycache__/
+*/__pycache__/
+
+
+SMC_results/
+*.npy
+
+.vscode/
+
+zeroDSims.py
