@@ -60,6 +60,7 @@ The script expects the standard SimVascular project structure. Ensure the follow
 * cow_faceID.mdl: The model face mapping file.
   
 ### Configuration parameters:
+**Phase 1**
 * *patient number*: Corresponds to the ID number that identifies the patient
 * *sv_project_filepath*: The filepath to the Simvascular project root. 
 * *merging_tolerances*: It is a dictionary that includes 3 tolerance values that the vtk.vtkCleanPolyData() function from the centerline merging phase needs:
@@ -69,13 +70,14 @@ The script expects the standard SimVascular project structure. Ensure the follow
   - "ACA tolerance": Specific threshold for Anterior Cerebral Arteries to prevent branch collapse due to anatomical proximity.
   
   - "Spatial tolerance": Maximum distance that a point needs to be from the 3D model's cap to be identified as inlet/outlet.
-
+**Phase 2**
 * *inflow_filepath*: Path were the inlet flow documents are located. 4 files are expected in the folder, one for each CoW inlet: LICA.dat, RICA.dat, LVA.dat and RVA.dat. These files need to respect the structure suported from Simvascular,
 with 2 columns, the first one for the time steps and the second for the flow values un mL/s.
-* *clinical_data_file*: A csv file that collects the clinical data from the patient. 
+* *clinical_data_file*: A csv file that collects the clinical data from the patient.
+**Phase 3**
 * *num_particles*: Is the number of samples used in the Sequential Monte Carlo (SMC) process.
 * *num_cores*: The SMC process can be parallelized. This parameter defines the number of cores used.
-
+* *err_tolerance*: The standard deviation from the normal function that represents the likelihood in the SMC. In other words, it represents the acceptable error percentage between the simulations and clinical data.
 ### Technical observations
 Units: The pipeline assumes scales in mmgs (mm, g, s).
 
