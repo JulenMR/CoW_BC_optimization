@@ -77,7 +77,8 @@ with 2 columns, the first one for the time steps and the second for the flow val
 * *num_cores*: The SMC process can be parallelized. This parameter defines the number of cores used.
 
 ### Technical observations
-Units: The pipeline assumes scales in mmgs (mm, g, s)
+Units: The pipeline assumes scales in mmgs (mm, g, s).
+
 The clinical_data_file (.csv) must follow the following structure (Pressure in mmHg, Flows in mL/s):
 
 | subject | HR   | SBP   | DBP  | R_ACA | L_ACA | R_MCA | L_MCA | R_PCA | L_PCA | R_SCA | L_SCA |
