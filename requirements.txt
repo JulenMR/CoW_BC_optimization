@@ -1,0 +1,12 @@
+numpy
+matplotlib
+pandas
+scipy
+vtk
+networkx
+pysvzerod
+tqdm
+seaborn
+particles
+wandb
+tabulate
