@@ -40,8 +40,8 @@ The entire pipeline can be executed from the `full_process.py` file.
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/JulenMR/kolmogorov_flow_JMR.git
-cd kolmogorov_flow_JMR
+git clone https://github.com/BioSiMMLab/CoW_BC_optimization.git
+cd CoW_BC_optimization
 ``` 
 2. Create virtual environment with VMTK library
 ```bash
