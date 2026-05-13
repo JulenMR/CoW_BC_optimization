@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import os 
 from scipy.interpolate import CubicSpline
 
-def smooth_inflow(original_flow_file, zeroDsim_file, threeDsim_file):     
+def smooth_inflow(original_flow_file, optimization_file, threeDsim_file):     
 
     flow_files = {
         "LICA": os.path.join(original_flow_file, "LICA.dat"),
@@ -24,14 +24,14 @@ def smooth_inflow(original_flow_file, zeroDsim_file, threeDsim_file):
             time_pts = data[sort_idx, 0]
             flow_pts = np.abs(data[sort_idx, 1])
 
-            t_penult, t_last = time_pts[-2], time_pts[-1]
-            f_penult, f_last = flow_pts[-2], flow_pts[-1]
-            n_puntos_falsos = 2
-            t_falsos = np.linspace(t_penult, t_last, n_puntos_falsos + 2)[1:-1]
-            f_falsos = f_penult + (t_falsos - t_penult) * (f_last - f_penult) / (t_last - t_penult)
+            t_last2, t_last = time_pts[-2], time_pts[-1]
+            f_last2, f_last = flow_pts[-2], flow_pts[-1]
+            synthetic_point_num = 2
+            t_regression = np.linspace(t_last2, t_last, synthetic_point_num + 2)[1:-1]
+            f_regression = f_last2 + (t_regression - t_last2) * (f_last - f_last2) / (t_last - t_last2)
             
-            time_pts_augmented = np.concatenate([time_pts[:-1], t_falsos, [t_last]])
-            flow_pts_augmented = np.concatenate([flow_pts[:-1], f_falsos, [f_last]])
+            time_pts_augmented = np.concatenate([time_pts[:-1], t_regression, [t_last]])
+            flow_pts_augmented = np.concatenate([flow_pts[:-1], f_regression, [f_last]])
 
             # Spline
             try:
@@ -39,13 +39,11 @@ def smooth_inflow(original_flow_file, zeroDsim_file, threeDsim_file):
             except ValueError:
                 cs = CubicSpline(time_pts_augmented, flow_pts_augmented, bc_type='clamped')
             
-            # Generamos los puntos de salida finales
             time_smooth = np.linspace(time_pts.min(), time_pts.max(), N_POINTS_OUT)
             flow_smooth = cs(time_smooth)
             
-            # --- NUEVA SECCIÓN DE GUARDADO CON HEADER ---
             output_path_3d = os.path.join(threeDsim_file, f"{label}_3d_smooth.dat") 
-            output_path_0d = os.path.join(zeroDsim_file, f"{label}_0d_smooth.dat")
+            output_path_0d = os.path.join(optimization_file, f"{label}_0d_smooth.dat")
             
             with open(output_path_3d, 'w') as f:
                 f.write(f"{N_POINTS_OUT},{FOURIER_MODES}\n")

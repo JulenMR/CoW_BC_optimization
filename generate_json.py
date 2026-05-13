@@ -156,7 +156,8 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
     print(f"\nCOMPLETED. Initial JSON saved: {output_path}")
     return final_segments, pos_to_node, inlet_nodes, outlet_nodes
 
-def visualize_graph(final_segments, pos_to_node, inlet_nodes, outlet_nodes):
+def visualize_graph(final_segments, pos_to_node, inlet_nodes, outlet_nodes, patient_num, save_path):
+    plt.close('all')
     G = nx.DiGraph() 
     node_to_pos = {v: (k[0], k[1]) for k, v in pos_to_node.items()} 
 
@@ -172,24 +173,29 @@ def visualize_graph(final_segments, pos_to_node, inlet_nodes, outlet_nodes):
         else:
             node_colors.append('skyblue')    
 
-    plt.figure(figsize=(10, 10))
+    fig, ax = plt.subplots(figsize=(10, 10))
     
-    nx.draw_networkx_nodes(G, node_to_pos, node_size=300, node_color=node_colors, edgecolors='black')
+    nx.draw_networkx_nodes(G, node_to_pos, node_size=300, node_color=node_colors, 
+                           edgecolors='black', ax=ax)
     
     nx.draw_networkx_edges(G, node_to_pos, arrowstyle='->', arrowsize=15, 
-                           edge_color='gray', width=1.5, alpha=0.7)
-    nx.draw_networkx_labels(G, node_to_pos, font_size=8)
-
-
-    plt.title("CoW graph")
-    plt.plot([], [], 'o', color='lightgreen', label='Inlet')
-    plt.plot([], [], 'o', color='salmon', label='Outlet (RCR)')
-    plt.plot([], [], 'o', color='skyblue', label='Junctions')
-    plt.legend(scatterpoints=1)
+                           edge_color='gray', width=1.5, alpha=0.7, ax=ax)
     
-    plt.axis('equal') 
-    plt.grid(True, linestyle='--', alpha=0.3)
+    nx.draw_networkx_labels(G, node_to_pos, font_size=8, ax=ax)
+
+    ax.set_title(f"PACS{patient_num:03d} graph", fontweight='bold')
+
+    ax.scatter([], [], c='lightgreen', edgecolors='black', label='Inlet')
+    ax.scatter([], [], c='salmon', edgecolors='black', label='Outlet (RCR)')
+    ax.scatter([], [], c='skyblue', edgecolors='black', label='Junctions')
+    ax.legend(scatterpoints=1, frameon=True, loc='upper right')
+    
+    ax.set_aspect('equal')
+    ax.grid(True, linestyle='--', alpha=0.3)
+    
+    plt.savefig(save_path, bbox_inches='tight')
     plt.show()
+    plt.close(fig)
 
 def get_clinical_data(file, p_number):
     pressure_data = pd.read_csv(file)

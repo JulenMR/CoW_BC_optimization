@@ -14,6 +14,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import pandas as pd
 import time 
+import os
+from full_process import mapping_dict
+from tqdm import tqdm
 
 class VLikelihood(dists.ProbDist):
     def __init__(self, log_val):
@@ -22,6 +25,12 @@ class VLikelihood(dists.ProbDist):
     
     def logpdf(self, x):
         return self.log_val
+
+progress_counter = None
+
+def init_pool(counter):
+    global progress_counter
+    progress_counter = counter
 
 class RCR_UQ(ssm.StateSpaceModel):
     def __init__(self, json_dict, active_rcr_ids, clinical_targets, branch_map, lbfgs_vals, error_tolerance, **kwargs):
@@ -47,14 +56,18 @@ class RCR_UQ(ssm.StateSpaceModel):
        
         N = x.shape[0] if len(x.shape) > 1 else 1
         log_weights = np.zeros(N)
+        pbar = tqdm(total=N, desc=f"SMC Step {t}", unit="part")
         
         if N == 1:
             log_weights[0] = self._evaluate_single_particle(x)
+            pbar.update(1)
         else:
 
             for i in range(N):
                 log_weights[i] = self._evaluate_single_particle(x[i])
-        
+                pbar.update(1)
+
+        pbar.close()
         return VLikelihood(log_weights)
     
     def _evaluate_single_particle(self, theta):
@@ -148,7 +161,7 @@ def plot_corner_per_outlet(result_npy, active_rcr_ids, mapping_dict):
         
         plt.show()
 
-def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
+def plot_all_parameters(sv_project_file, result_npy, active_rcr_ids, mapping_dict, patient_num, save= False):
     samples = np.load(result_npy)
     num_outlets = len(active_rcr_ids)
     
@@ -193,12 +206,15 @@ def plot_all_parameters(result_npy, active_rcr_ids, mapping_dict):
 
             ax.grid(axis='x', linestyle='--', alpha=0.3)
 
-    plt.suptitle("Posteriors: Mean, 5th & 95th Percentiles", 
+    plt.suptitle(f"Posterior distributions for PACS{patient_num:03d}", 
                  fontsize=22, fontweight='bold', y=0.98)
     
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.subplots_adjust(left=0.08, wspace=0.4, hspace=0.6) 
-    
+    if save:
+        save_path = os.path.join(sv_project_file, "ROMSimulations", f"uq_pacs{patient_num:03d}.png")
+        plt.savefig(save_path)
+        print(f"Posterior distribution image saved in {save_path}")
     plt.show()
 
 

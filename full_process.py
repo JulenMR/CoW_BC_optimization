@@ -26,7 +26,14 @@ def centerline_extraction(sv_project_filepath, merging_tolerances, extract_indiv
         print(f"Created filepath: {centerlines_file}")
     
     input_file = os.path.join(sv_project_filepath, "Models", "cow_coarse_model.vtp")
+
+    if not os.path.exists(input_file):
+        print(f"Model not found! Remember that the name has to be cow_coarse_model.vtp")
     ModelFaceID_file = os.path.join(sv_project_filepath, "Models", "cow_faceID.mdl")
+
+    if not os.path.exists(ModelFaceID_file):
+        print(f"Model not found! Remember that the name has to be cow_faceID.mdl")
+
     final_centerline_file = os.path.join(centerlines_file, "centerline_final.vtp")
 
     # Face mapping
@@ -46,27 +53,27 @@ def centerline_extraction(sv_project_filepath, merging_tolerances, extract_indiv
     centerline_merging(branch_files=branch_files, input_model_file=input_file, output_file=final_centerline_file,
                         face_mapping = face_mapping, tol_general=general_tolerance, tol_aca = aca_tolerance, spatial_tolerance=spatial_tolerance)
     
-def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clinical_data_csv):
+def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clinical_data_csv, visualize = False):
 
-    zeroD_simulation_file = os.path.join(sv_project_filepath, "ROMSimulations", "zeroD_simulation")
-    if not os.path.exists(zeroD_simulation_file):
-            os.makedirs(zeroD_simulation_file)
-            print(f"Created filepath: {zeroD_simulation_file}")    
+    bc_optimization_file = os.path.join(sv_project_filepath, "ROMSimulations", "bc_optimization")
+    if not os.path.exists(bc_optimization_file):
+            os.makedirs(bc_optimization_file)
+            print(f"Created filepath: {bc_optimization_file}")    
     
     final_centerline_file = os.path.join(sv_project_filepath, "ROMSimulations", "Centerlines", "centerline_final.vtp")
-    initial_json_file = os.path.join(zeroD_simulation_file, "zeroD_script.json")
+    initial_json_file = os.path.join(bc_optimization_file, "initial_zeroD_script.json")
 
     # Inflow smoothing 
     opt_3D_simulation_file = os.path.join(sv_project_filepath, "Simulations", "fine", f"{patient_number}_optimized_BC")
     if not os.path.exists(opt_3D_simulation_file):
             os.makedirs(opt_3D_simulation_file)
             print(f"Created filepath: {opt_3D_simulation_file}")   
-    smooth_inflow(original_flow_file=inflows_filepath, zeroDsim_file=zeroD_simulation_file, threeDsim_file=opt_3D_simulation_file)
+    smooth_inflow(original_flow_file=inflows_filepath, zeroDsim_file=bc_optimization_file, threeDsim_file=opt_3D_simulation_file)
 
-    carotid_left_flow = os.path.join(zeroD_simulation_file, "LICA_0d_smooth.dat")
-    carotid_right_flow = os.path.join(zeroD_simulation_file, "RICA_0d_smooth.dat")
-    vertebral_left_flow = os.path.join(zeroD_simulation_file, "LVA_0d_smooth.dat")
-    vertebral_right_flow = os.path.join(zeroD_simulation_file, "RVA_0d_smooth.dat")
+    carotid_left_flow = os.path.join(bc_optimization_file, "LICA_0d_smooth.dat")
+    carotid_right_flow = os.path.join(bc_optimization_file, "RICA_0d_smooth.dat")
+    vertebral_left_flow = os.path.join(bc_optimization_file, "LVA_0d_smooth.dat")
+    vertebral_right_flow = os.path.join(bc_optimization_file, "RVA_0d_smooth.dat")
 
     flow_data = np.loadtxt(carotid_left_flow)
     tau_param = np.round(flow_data[-1, 0],3)
@@ -81,8 +88,12 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
     }
     segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(vtp_path= final_centerline_file, output_path = initial_json_file, 
                                                                                     flow_files=my_flows, rcr_values=my_rcrs, tau=tau_param)
+    if visualize == True:
+         save_path = os.path.join(sv_project_filepath, "ROMSimulations", "Centerlines", f"graph_{patient_number:03d}.png")
+         visualize_graph(final_segments= segments, pos_to_node = pos_to_node, inlet_nodes = inlet_nodes, outlet_nodes = outlet_nodes, 
+                         patient_num= patient_number, save_path = save_path)
 
-    optimized_json = os.path.join(zeroD_simulation_file, "zeroD_script_optimized.json")
+    optimized_json = os.path.join(bc_optimization_file, "bc_optimized.json")
     clinical_data = get_clinical_data(file=clinical_data_file, p_number=patient_number)
     opt_json = run_optimization(initial_json_file, clinical_data, mapping_dict)
     
@@ -93,10 +104,10 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
     inp_optimized_path = os.path.join(opt_3D_simulation_file, "svFSI_optimized.inp")
     update_svfsi(json_path=optimized_json, inp_path="svFSI_base.inp", save_path = inp_optimized_path, mapping_dict=mapping_dict)
 
-def uncertainty_quantification(sv_project_filepath, patient_number, clinical_data_file, num_particles, num_cores, error_tolerance):
+def uncertainty_quantification(sv_project_filepath, patient_number, clinical_data_file, num_particles, num_cores, error_tolerance, visualize= False, save= False):
 
     clinical_data  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
-    json_path = os.path.join(sv_project_filepath, "ROMSimulations", "zeroD_simulation", "zeroD_script_optimized.json")
+    json_path = os.path.join(sv_project_filepath, "ROMSimulations", "bc_optimization", "bc_optimized.json")
 
     with open(json_path, 'r') as f: json_dict = json.load(f)
     active_rcr_ids = []
@@ -134,12 +145,20 @@ def uncertainty_quantification(sv_project_filepath, patient_number, clinical_dat
     smc_results_files = "SMC_results"
     if not os.path.exists(smc_results_files):
             os.makedirs(smc_results_files)
-    np.save(os.path.join(smc_results_files, f"smc_result_pacs{patient_number:03d}.npy"), alg.X)
+    result_name = os.path.join(smc_results_files, f"smc_result_pacs{patient_number:03d}.npy")
+    np.save(result_name, alg.X)
     
-    print(f"SMC was successfull. {alg.X.shape[0]} samples for {alg.X.shape[1]} parameters have been created.")
+    print(f"SMC was successfull. {alg.X.shape[0]} particles for {alg.X.shape[1]} parameters were created.")
+    if visualize == True:
+         plot_all_parameters(sv_project_file= sv_project_filepath, result_npy = result_name, active_rcr_ids = active_rcr_ids, 
+                             mapping_dict = mapping_dict, patient_num=patient_number, save= save)
+
 
 if __name__ == "__main__":
-    patient_number = 8
+
+    ########################################################################################
+    # Parameter Selection
+    patient_number = 11
     sv_path = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}"
     merging_tolerances = {
          "General tolerance": 0.01,
@@ -150,15 +169,17 @@ if __name__ == "__main__":
     inflow_files = os.path.join(sv_path, "Simulations", "fine", f"{patient_number}_asl")
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/subject_targets.csv"
 
-    num_particles = 200
+    num_particles = 2000
     n_cores = 16
     err_tolerance = 0.05
+    ########################################################################################
 
-    centerline_extraction(sv_project_filepath = sv_path, merging_tolerances = merging_tolerances, extract_individual_centerlines = False)
+    #centerline_extraction(sv_project_filepath = sv_path, merging_tolerances = merging_tolerances, extract_individual_centerlines = True)
 
-    bc_optimization(patient_number = patient_number, sv_project_filepath = sv_path, inflows_filepath = inflow_files, clinical_data_csv = clinical_data_file)
+    # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_path, inflows_filepath = inflow_files, 
+    #                 clinical_data_csv = clinical_data_file, visualize=True)
 
     uncertainty_quantification(sv_project_filepath = sv_path, patient_number = patient_number, clinical_data_file = clinical_data_file, 
-                               num_particles = num_particles, num_cores = n_cores, error_tolerance = err_tolerance)
+                               num_particles = num_particles, num_cores = n_cores, error_tolerance = err_tolerance, visualize=True, save=True)
 
 

@@ -34,12 +34,3 @@ def update_svfsi(json_path, inp_path, mapping_dict, save_path=None):
         f.write(inp_content)
     
     print(f"\n File saved: {save_path}")
-
-if __name__ == "__main__":
-    mapping_dict = {
-        "L_ICA":0, "R_ICA":1, "L_VA":2, "R_VA":3, "L_SCA":4, "L_PCA":5,
-        "L_MCA":6, "L_ACA":7, "R_ACA":8, "R_MCA":9, "R_PCA":10, "R_SCA":11,
-    }
-    inp_path = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Simulations/fine/8_zeroD_opt/svFSI_copia.inp"
-    json_path = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-008/Models/zeroD_simulation/zeroD_script_optimized.json"
-    update_svfsi(json_path=json_path, inp_path=inp_path, mapping_dict = mapping_dict)
