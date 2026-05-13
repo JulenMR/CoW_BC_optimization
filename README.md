@@ -43,12 +43,12 @@ The entire pipeline can be executed from the `full_process.py` file.
 git clone https://github.com/JulenMR/kolmogorov_flow_JMR.git
 cd kolmogorov_flow_JMR
 ``` 
-2. Create virtual environment
+2. Create virtual environment with VMTK library
 ```bash
-python -m venv venv
-source venv/bin/activate
+conda create -n cow_pipeline_env -c vmtk vmtk python=3.10
+conda activate cow_pipeline_env
 ```
-3. Install dependencies:
+3. Install dependencies with pip:
 ```bash
 pip install -r requirements.txt
 ```
@@ -78,9 +78,10 @@ with 2 columns, the first one for the time steps and the second for the flow val
 
 ### Technical observations
 Units: The pipeline assumes scales in mmgs (mm, g, s)
-The clinical_data_file (.csv) must follow this structure (Flows in mL/s, Pressure in mmHg):
+The clinical_data_file (.csv) must follow the following structure (Pressure in mmHg, Flows in mL/s):
 
 | subject | HR   | SBP   | DBP  | R_ACA | L_ACA | R_MCA | L_MCA | R_PCA | L_PCA | R_SCA | L_SCA |
 |---------|------|-------|------|-------|-------|-------|-------|-------|-------|-------|-------|
 | 1       | 82.3 | 122   | 86   | 0.86  | 0.88  | 1.83  | 2.05  | 0.36  | 0.37  | 0.16  | 0.23  |
+
 
