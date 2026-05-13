@@ -83,10 +83,4 @@ The clinical_data_file (.csv) must follow this structure (Flows in mL/s, Pressur
 | subject | HR   | SBP   | DBP  | R_ACA | L_ACA | R_MCA | L_MCA | R_PCA | L_PCA | R_SCA | L_SCA |
 |---------|------|-------|------|-------|-------|-------|-------|-------|-------|-------|-------|
 | 1       | 82.3 | 122   | 86   | 0.86  | 0.88  | 1.83  | 2.05  | 0.36  | 0.37  | 0.16  | 0.23  |
-Requirements: - pysvzerod
 
-vmtk
-
-particles (for SMC)
-
-vtk, pandas, numpy
