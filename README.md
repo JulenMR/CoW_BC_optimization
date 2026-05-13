@@ -1,0 +1,92 @@
+# Automatic Boundary Condition parameter setting for Circle of Willis
+### Overview
+This pipeline provides optimized Boundary Condition (BC) parameters that match clinical meassurements for Circle of Willis (CoW) patient-specific 3D hemodynamics.
+The code is designed to work inside a Simvasclar project file structure and outputs optimized 3-Element Windkessel parameters (Rd, C, Rp) for each CoW outlet matching pressure and flowsplit clinical meassurements.
+
+Sivascular's zeroD solver was chosen as a computationally cheap surrogate model that enables the efficient implementation of optimization algorithms. For this case the L-BFGS optimizer was selected obtaininga fast convergence
+with NRMSE <5%. Once the optimum BC parameters are calculated, uncertainty quantification was performed using the Sequential Monte Carlo technique. This produces 5% and 95% confidance intervals for each parameter.
+
+The workflow is divided into 3 different phases:
+1. Centerline extraction
+2. Boundary Condition optimization
+3. Uncertainty quantification
+
+### 1. Centerline extraction
+Simvascular's default centerline extraction function works by finding the shortest path between the inlets and outlets. However this method fail to capture CoW's looped topology and some branches are left uncovered. Consequently a 
+custom centerline extraction function was developed. This function extracts individual centerlines from different inlet/outlet pairs using the VMTK library and posteriorly merges them into a unified centerline that captures the shape 
+of all the branches. 
+Additionally this function identifies key points such as:
+- Inlets 
+- Outlets 
+- Junctions
+- Stenoses
+
+### 2. Boundary Condition Optimization
+The aim of the second phase is to calculate the optimum BC parameters that match the clinical meassurements by applying the L-BFGS algorithm to 0D surrogates. First of all, it is necessary to translate the centerline into a JSON file
+that the ZeroD optimizer understands. To do so, the centerline is interpreted as a Graph network, is explored using the Breadth First Search algorithm and the coordenates of each branch, junction inlet and outlet are included in the 
+JSON file that produces the 0D simulation. 
+
+After this, the L-BFGS quasi-Newton optimizer finds the boundary condition parameters that produce simulations with pressures and flow distributions that match clinical meassurements. The obtained 
+parameters can be used in a 3D simulation as the difference in results is neglectible. Finally, the .inp file that sets up the 3D simulation using the svFSI solver is automatically generated.
+
+### 3. Uncertainty Quantification
+The last steps performs an uncertainty quantification analysis that provides confidance intervals using the Sequential Monte Carlo approach. The values obtained from the L-BFGS optimizer are used as the mean for the prior of each parameter with
+a standard deviation of 25%. This process is parallelizable and the number of particles for the process can be selected.
+
+## **How to use this pipeline**
+The entire pipeline can be executed from the `full_process.py` file. 
+
+### Prerequisites & File Structure
+
+1. Clone the repository:
+```bash
+git clone https://github.com/JulenMR/kolmogorov_flow_JMR.git
+cd kolmogorov_flow_JMR
+``` 
+2. Create virtual environment
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+The script expects the standard SimVascular project structure. Ensure the following files are in the Models/ folder:
+
+* cow_model_coarse.vtp: A coarse remesh of your 3D model (recommended for faster centerline extraction).
+
+* cow_faceID.mdl: The model face mapping file.
+  
+### Configuration parameters:
+* *patient number*: Corresponds to the ID number that identifies the patient
+* *sv_project_filepath*: The filepath to the Simvascular project root. 
+* *merging_tolerances*: It is a dictionary that includes 3 tolerance values that the vtk.vtkCleanPolyData() function from the centerline merging phase needs:
+  
+  - "General tolerance": Distance threshold to merge two points into one node.
+  
+  - "ACA tolerance": Specific threshold for Anterior Cerebral Arteries to prevent branch collapse due to anatomical proximity.
+  
+  - "Spatial tolerance": Maximum distance that a point needs to be from the 3D model's cap to be identified as inlet/outlet.
+
+* *inflow_filepath*: Path were the inlet flow documents are located. 4 files are expected in the folder, one for each CoW inlet: LICA.dat, RICA.dat, LVA.dat and RVA.dat. These files need to respect the structure suported from Simvascular,
+with 2 columns, the first one for the time steps and the second for the flow values un mL/s.
+* *clinical_data_file*: A csv file that collects the clinical data from the patient. 
+* *num_particles*: Is the number of samples used in the Sequential Monte Carlo (SMC) process.
+* *num_cores*: The SMC process can be parallelized. This parameter defines the number of cores used.
+
+### Technical observations
+Units: The pipeline assumes scales in mmgs (mm, g, s)
+The clinical_data_file (.csv) must follow this structure (Flows in mL/s, Pressure in mmHg):
+
+| subject | HR   | SBP   | DBP  | R_ACA | L_ACA | R_MCA | L_MCA | R_PCA | L_PCA | R_SCA | L_SCA |
+|---------|------|-------|------|-------|-------|-------|-------|-------|-------|-------|-------|
+| 1       | 82.3 | 122   | 86   | 0.86  | 0.88  | 1.83  | 2.05  | 0.36  | 0.37  | 0.16  | 0.23  |
+Requirements: - pysvzerod
+
+vmtk
+
+particles (for SMC)
+
+vtk, pandas, numpy
