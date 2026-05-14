@@ -1,4 +1,4 @@
-# Automatic Boundary Condition parameter setting for Circle of Willis
+# Automatic Boundary Condition parameter setting for Circle of Willis 3D models
 ### Overview
 This pipeline provides optimized Boundary Condition (BC) parameters that match clinical meassurements for Circle of Willis (CoW) patient-specific 3D hemodynamics.
 The code is designed to work inside a Simvasclar project file structure and outputs optimized 3-Element Windkessel parameters (Rd, C, Rp) for each CoW outlet matching pressure and flowsplit clinical meassurements.
