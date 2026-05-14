@@ -59,7 +59,7 @@ The script expects the standard SimVascular project structure. Ensure the follow
 
 * cow_faceID.mdl: The model face mapping file.
   
-### Configuration parameters:
+### Input parameters:
 **Phase 1**
 * *patient number*: Corresponds to the ID number that identifies the patient
 * *sv_project_filepath*: The filepath to the Simvascular project root. 
@@ -78,7 +78,7 @@ with 2 columns, the first one for the time steps and the second for the flow val
 * *num_particles*: Is the number of samples used in the Sequential Monte Carlo (SMC) process.
 * *num_cores*: The SMC process can be parallelized. This parameter defines the number of cores used.
 * *err_tolerance*: The standard deviation from the normal function that represents the likelihood in the SMC. In other words, it represents the acceptable error percentage between the simulations and clinical data.
-### Technical observations
+### Observations
 Units: The pipeline assumes scales in mmgs (mm, g, s).
 
 The clinical_data_file (.csv) must follow the following structure (Pressure in mmHg, Flows in mL/s):
