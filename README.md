@@ -70,10 +70,12 @@ The script expects the standard SimVascular project structure. Ensure the follow
   - "ACA tolerance": Specific threshold for Anterior Cerebral Arteries to prevent branch collapse due to anatomical proximity.
   
   - "Spatial tolerance": Maximum distance that a point needs to be from the 3D model's cap to be identified as inlet/outlet.
+  - 
 **Phase 2**
 * *inflow_filepath*: Path were the inlet flow documents are located. 4 files are expected in the folder, one for each CoW inlet: LICA.dat, RICA.dat, LVA.dat and RVA.dat. These files need to respect the structure suported from Simvascular,
 with 2 columns, the first one for the time steps and the second for the flow values un mL/s.
 * *clinical_data_file*: A csv file that collects the clinical data from the patient.
+* 
 **Phase 3**
 * *num_particles*: Is the number of samples used in the Sequential Monte Carlo (SMC) process.
 * *num_cores*: The SMC process can be parallelized. This parameter defines the number of cores used.
