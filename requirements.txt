@@ -8,5 +8,3 @@ pysvzerod
 tqdm
 seaborn
 particles
-wandb
-tabulate

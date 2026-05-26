@@ -4,14 +4,36 @@ import numpy as np
 import pandas as pd
 from individual_centerline import get_face_center
 import os
-
 def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, output_file, face_mapping, spatial_tolerance=0.2):
 
-    # Phase 1: Union and cleaning in 2 phases
+    # Phase 0: Get outlet points from each centerline
+    ending_nodes = []
+    for f in branch_files:
+        if os.path.exists(f):
+            reader = vtk.vtkXMLPolyDataReader()
+            reader.SetFileName(f); reader.Update()
+            poly_rama = reader.GetOutput()
+            
+            # Count cow many cells are in contact
+            local_connectivity = defaultdict(int)
+            for i in range(poly_rama.GetNumberOfCells()):
+                cell_ids = poly_rama.GetCell(i).GetPointIds()
+                for j in range(cell_ids.GetNumberOfIds()):
+                    local_connectivity[cell_ids.GetId(j)] += 1
+            
+            # Outlet are points that only touch 1 cell
+            for pid, count in local_connectivity.items():
+                if count == 1:
+                    ending_nodes.append(poly_rama.GetPoint(pid))
+                    
+    # Eliminate duplicates
+    ending_nodes = list(set(tuple(np.round(p, 6)) for p in ending_nodes))
+    print(f"{len(ending_nodes)} outlets detected")
+
+    # Phase 1: Union and cleaning in 2 phases (Se mantiene igual)
     aca_files = [f for f in branch_files if "ACA" in os.path.basename(f)]
     not_aca_files = [f for f in branch_files if "ACA" not in os.path.basename(f)]
 
-    # General branch union (high tolerance)
     append_general = vtk.vtkAppendPolyData()
     for f in [f for f in not_aca_files if f not in aca_files]:
         reader = vtk.vtkXMLPolyDataReader()
@@ -24,7 +46,6 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     cleaner_general.SetTolerance(tol_general)
     cleaner_general.Update()
 
-    # Final union with ACAs lower tolerance
     append_acas = vtk.vtkAppendPolyData()
     for f in aca_files:
         reader = vtk.vtkXMLPolyDataReader()
@@ -42,15 +63,51 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     final_cleaner.SetTolerance(tol_aca) 
     final_cleaner.Update()
 
-    # Clean duplicates
     clean_poly = final_cleaner.GetOutput()
+
+    # -------------------------------------------------------------------------
+    # INYECCIÓN DIRECTA PRE-STRIPPER: Aseguramos la existencia de las bocas
+    # -------------------------------------------------------------------------
+    existing_points = clean_poly.GetPoints()
+    outlet_to_id = {}
+    
+    for pt_orig in ending_nodes:
+        found = False
+        for i in range(existing_points.GetNumberOfPoints()):
+            pt_act = existing_points.GetPoint(i)
+            dist = ((pt_act[0] - pt_orig[0])**2 + (pt_act[1] - pt_orig[1])**2 + (pt_act[2] - pt_orig[2])**2)**0.5
+            if dist < spatial_tolerance:
+                existing_points.SetPoint(i, pt_orig)  
+                outlet_to_id[pt_orig] = i
+                found = True
+                break
+        
+        if not found:
+            new_id = existing_points.InsertNextPoint(pt_orig)
+            outlet_to_id[pt_orig] = new_id
+
     unique_cells = vtk.vtkCellArray()
     existing_segments = set()
 
     for i in range(clean_poly.GetNumberOfCells()):
         ids = clean_poly.GetCell(i).GetPointIds()
-        for j in range(ids.GetNumberOfIds() - 1):
+        n_ids = ids.GetNumberOfIds()
+        
+        for j in range(n_ids - 1):
             p1, p2 = ids.GetId(j), ids.GetId(j+1)
+            
+            pt_1_coords = existing_points.GetPoint(p1)
+            pt_2_coords = existing_points.GetPoint(p2)
+            
+            # Si el segmento original estaba en un extremo truncado, re-enrutamos al ID inyectado
+            for pt_orig, ext_id in outlet_to_id.items():
+                if ((pt_1_coords[0] - pt_orig[0])**2 + (pt_1_coords[1] - pt_orig[1])**2 + (pt_1_coords[2] - pt_orig[2])**2)**0.5 < spatial_tolerance:
+                    p1 = ext_id
+                if ((pt_2_coords[0] - pt_orig[0])**2 + (pt_2_coords[1] - pt_orig[1])**2 + (pt_2_coords[2] - pt_orig[2])**2)**0.5 < spatial_tolerance:
+                    p2 = ext_id
+
+            if p1 == p2: continue  
+
             segment = tuple(sorted((p1, p2)))
             if segment not in existing_segments:
                 existing_segments.add(segment)
@@ -60,7 +117,7 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
                 unique_cells.InsertNextCell(line)
 
     poly_unique = vtk.vtkPolyData()
-    poly_unique.SetPoints(clean_poly.GetPoints())
+    poly_unique.SetPoints(existing_points)
     poly_unique.SetLines(unique_cells)
     poly_unique.GetPointData().PassData(clean_poly.GetPointData()) 
 
