@@ -12,25 +12,25 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
         if os.path.exists(f):
             reader = vtk.vtkXMLPolyDataReader()
             reader.SetFileName(f); reader.Update()
-            poly_rama = reader.GetOutput()
+            poly_branch = reader.GetOutput()
             
             # Count cow many cells are in contact
             local_connectivity = defaultdict(int)
-            for i in range(poly_rama.GetNumberOfCells()):
-                cell_ids = poly_rama.GetCell(i).GetPointIds()
+            for i in range(poly_branch.GetNumberOfCells()):
+                cell_ids = poly_branch.GetCell(i).GetPointIds()
                 for j in range(cell_ids.GetNumberOfIds()):
                     local_connectivity[cell_ids.GetId(j)] += 1
             
             # Outlet are points that only touch 1 cell
             for pid, count in local_connectivity.items():
                 if count == 1:
-                    ending_nodes.append(poly_rama.GetPoint(pid))
+                    ending_nodes.append(poly_branch.GetPoint(pid))
                     
     # Eliminate duplicates
     ending_nodes = list(set(tuple(np.round(p, 6)) for p in ending_nodes))
     print(f"{len(ending_nodes)} outlets detected")
 
-    # Phase 1: Union and cleaning in 2 phases (Se mantiene igual)
+    # Phase 1: Union and cleaning in 2 phases
     aca_files = [f for f in branch_files if "ACA" in os.path.basename(f)]
     not_aca_files = [f for f in branch_files if "ACA" not in os.path.basename(f)]
 
@@ -65,9 +65,7 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
 
     clean_poly = final_cleaner.GetOutput()
 
-    # -------------------------------------------------------------------------
-    # INYECCIÓN DIRECTA PRE-STRIPPER: Aseguramos la existencia de las bocas
-    # -------------------------------------------------------------------------
+    # Add ending nodes
     existing_points = clean_poly.GetPoints()
     outlet_to_id = {}
     
@@ -99,7 +97,6 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
             pt_1_coords = existing_points.GetPoint(p1)
             pt_2_coords = existing_points.GetPoint(p2)
             
-            # Si el segmento original estaba en un extremo truncado, re-enrutamos al ID inyectado
             for pt_orig, ext_id in outlet_to_id.items():
                 if ((pt_1_coords[0] - pt_orig[0])**2 + (pt_1_coords[1] - pt_orig[1])**2 + (pt_1_coords[2] - pt_orig[2])**2)**0.5 < spatial_tolerance:
                     p1 = ext_id

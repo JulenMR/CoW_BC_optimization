@@ -20,6 +20,7 @@ def smooth_inflow(original_flow_file, optimization_file, threeDsim_file):
     for i, (label, path) in enumerate(flow_files.items()):
         if os.path.exists(path):
             data = np.loadtxt(path, skiprows=1)
+            timestep_size = data[-1,0]
             sort_idx = np.argsort(data[:, 0])
             time_pts = data[sort_idx, 0]
             flow_pts = np.abs(data[sort_idx, 1])
@@ -53,5 +54,7 @@ def smooth_inflow(original_flow_file, optimization_file, threeDsim_file):
             with open(output_path_0d, 'w') as f:
                 for t, fl in zip(time_smooth, flow_smooth):
                     f.write(f"{t:.6e}\t{abs(fl):.6e}\n")
+
+
 
   

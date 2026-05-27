@@ -2,7 +2,7 @@ import json
 import re
 import os
 
-def update_svfsi(json_path, inp_path, mapping_dict, save_path=None):
+def update_svfsi(json_path, inp_path, mapping_dict, timestep_size, save_path=None):
     with open(json_path, 'r') as f:
         zero_d_data = json.load(f)
     
@@ -29,6 +29,16 @@ def update_svfsi(json_path, inp_path, mapping_dict, save_path=None):
                 print(f"Updated {artery_name}")
             else:
                 print(f"Warning: BC block for {artery_name} not found.")
+
+    timestep_size_pattern = r"(Time step size:\s*)([\d\.\-\+eE]+)"
+    new_value = timestep_size / 1000.0
+    timestep_size_replacement = rf"\g<1>{new_value:.6f}"
+    
+    if re.search(timestep_size_pattern, inp_content):
+        inp_content = re.sub(timestep_size_pattern, timestep_size_replacement, inp_content)
+        print(f"Updated timestep size to: {new_value:.6f}")
+    else:
+        print("Warning: 'Time step size' block not found in the .inp file.")
 
     with open(save_path, 'w') as f:
         f.write(inp_content)

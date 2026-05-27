@@ -25,7 +25,7 @@ def centerline_extraction(sv_project_filepath, merging_tolerances, extract_indiv
         os.makedirs(centerlines_file)
         print(f"Created filepath: {centerlines_file}")
     
-    input_file = os.path.join(sv_project_filepath, "Models", "cow_coarse.vtp")
+    input_file = os.path.join(sv_project_filepath, "Models", "cow_coarse_model.vtp")
     if not os.path.exists(input_file):
         raise FileNotFoundError(f"Model not found! Remember that the name of the model has to be cow_coarse_model.vtp")
 
@@ -76,6 +76,7 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
 
     flow_data = np.loadtxt(carotid_left_flow)
     tau_param = np.round(flow_data[-1, 0],3)
+    print(tau_param)
 
     my_rcrs = get_initial_BC(clinical_data_file=clinical_data_csv, patient_number=patient_number,
                              mapping_dict=mapping_dict, tau=tau_param)    
@@ -101,7 +102,7 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
     print(f"\nOptimization finalized. JSON File saved in {optimized_json}")
 
     inp_optimized_path = os.path.join(opt_3D_simulation_file, "svFSI_optimized.inp")
-    update_svfsi(json_path=optimized_json, inp_path="svFSI_base.inp", save_path = inp_optimized_path, mapping_dict=mapping_dict)
+    update_svfsi(json_path=optimized_json, inp_path="svFSI_base.inp", save_path = inp_optimized_path, mapping_dict=mapping_dict, timestep_size=tau_param)
 
 def uncertainty_quantification(sv_project_filepath, patient_number, clinical_data_file, num_particles, num_cores, error_tolerance, visualize= False, save= False):
 
@@ -155,10 +156,10 @@ def uncertainty_quantification(sv_project_filepath, patient_number, clinical_dat
 
 if __name__ == "__main__":
 
-    ########################################################################################
+    #######################################################################################
     ### Parameter Selection
     # Phase 1
-    patient_number = 5
+    patient_number = 11
     sv_project_filepath = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-{patient_number:03d}"
     merging_tolerances = {
          "General tolerance": 0.01,
@@ -167,21 +168,21 @@ if __name__ == "__main__":
     }
 
     # Phase 2
-    # inflow_filepath = os.path.join(sv_project_filepath, "Simulations", "fine", f"{patient_number}_asl")
-    # clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_model/subject_targets.csv"
+    inflow_filepath = os.path.join(sv_project_filepath, "Simulations", "fine", f"{patient_number}_asl")
+    clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/subject_targets.csv"
 
-    # # Phase 3
-    # num_particles = 2000
-    # num_cores = 16
-    # err_tolerance = 0.05
+    # Phase 3
+    num_particles = 2000
+    num_cores = 16
+    err_tolerance = 0.05
     ########################################################################################
     ### Functions
     # Phase 1
-    centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, extract_individual_centerlines = False)
+    #centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, extract_individual_centerlines = False)
 
     # Phase 2
-    # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
-    #                 clinical_data_csv = clinical_data_file, visualize=True)
+    bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
+                    clinical_data_csv = clinical_data_file, visualize=True)
 
     # # Phase 3
     # uncertainty_quantification(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
