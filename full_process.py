@@ -128,7 +128,8 @@ def uncertainty_quantification(sv_project_filepath, patient_number, clinical_dat
                        clinical_targets=clinical_data, 
                        branch_map=mapping_dict, 
                        lbfgs_vals = deterministic_param_values,
-                       error_tolerance= error_tolerance)
+                       error_tolerance= error_tolerance,
+                       num_cores=16)
 
     fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
 
@@ -141,12 +142,29 @@ def uncertainty_quantification(sv_project_filepath, patient_number, clinical_dat
                                  out_func=None)
 
     alg = results[0]['output']
+    final_particles = alg.X  # Nube de partículas final
 
     smc_results_files = "SMC_results"
     if not os.path.exists(smc_results_files):
-            os.makedirs(smc_results_files)
+        os.makedirs(smc_results_files)
+        
+    raw_p = np.load(os.path.join(smc_results_files, "temp_raw_particles.npy"))
+    raw_s = np.load(os.path.join(smc_results_files, "temp_raw_scores.npy"))
+    
+    final_scores = np.zeros(final_particles.shape[0])
+    for idx, p in enumerate(final_particles):
+        # Buscamos qué fila de las evaluadas originalmente corresponde a esta partícula final
+        match_idx = np.where((raw_p == p).all(axis=1))[0][0]
+        final_scores[idx] = raw_s[match_idx]
+    
     result_name = os.path.join(smc_results_files, f"smc_result_pacs{patient_number:03d}.npy")
-    np.save(result_name, alg.X)
+    scores_name = os.path.join(smc_results_files, f"smc_scores_pacs{patient_number:03d}.npy")
+    
+    np.save(result_name, final_particles)
+    np.save(scores_name, final_scores) # <--- Aquí tienes tus scores guardados exactos
+    
+    os.remove(os.path.join(smc_results_files, "temp_raw_particles.npy"))
+    os.remove(os.path.join(smc_results_files, "temp_raw_scores.npy"))
     
     print(f"SMC was successfull. {alg.X.shape[0]} particles for {alg.X.shape[1]} parameters were created.")
     if visualize == True:
@@ -159,7 +177,7 @@ if __name__ == "__main__":
     #######################################################################################
     ### Parameter Selection
     # Phase 1
-    patient_number = 11
+    patient_number = 5
     sv_project_filepath = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-{patient_number:03d}"
     merging_tolerances = {
          "General tolerance": 0.01,
@@ -181,11 +199,11 @@ if __name__ == "__main__":
     #centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, extract_individual_centerlines = False)
 
     # Phase 2
-    bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
-                    clinical_data_csv = clinical_data_file, visualize=True)
+    # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
+    #                 clinical_data_csv = clinical_data_file, visualize=True)
 
-    # # Phase 3
-    # uncertainty_quantification(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
-    #                            num_particles = num_particles, num_cores = num_cores, error_tolerance = err_tolerance, visualize=True, save=True)
+    # Phase 3
+    uncertainty_quantification(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
+                               num_particles = num_particles, num_cores = num_cores, error_tolerance = err_tolerance, visualize=False, save=True)
 
 
