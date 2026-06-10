@@ -176,11 +176,11 @@ if __name__ == "__main__":
     #######################################################################################
     ### Parameter Selection
     # Phase 1
-    patient_number = 5
+    patient_number = 11
     sv_project_filepath = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-{patient_number:03d}"
     merging_tolerances = {
          "General tolerance": 0.01,
-         "ACA tolerance": 0.01,
+         "ACA tolerance": 0.015,
          "Spatial tolerance": 2.2
     }
 
@@ -195,14 +195,14 @@ if __name__ == "__main__":
     ########################################################################################
     ### Functions
     # Phase 1
-    #centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, extract_individual_centerlines = False)
+    centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, extract_individual_centerlines = False)
 
     # Phase 2
     # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
     #                 clinical_data_csv = clinical_data_file, visualize=True)
 
     # Phase 3
-    uncertainty_quantification(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
-                               num_particles = num_particles, num_cores = num_cores, error_tolerance = err_tolerance, visualize=False, save=True)
+    # uncertainty_quantification(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
+    #                            num_particles = num_particles, num_cores = num_cores, error_tolerance = err_tolerance, visualize=False, save=True)
 
 
