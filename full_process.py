@@ -13,6 +13,10 @@ from SMC import *
 import glob
 import time
 
+###################################################
+# ORIGINAL VERSION: MAIN BRANCH
+####################################################
+
 mapping_dict = {
         "L_ICA":0, "R_ICA":1, "L_VA":2, "R_VA":3, "L_SCA":4, "L_PCA":5,
         "L_MCA":6, "L_ACA":7, "R_ACA":8, "R_MCA":9, "R_PCA":10, "R_SCA":11,
