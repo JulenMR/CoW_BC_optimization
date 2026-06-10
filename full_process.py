@@ -142,7 +142,7 @@ def uncertainty_quantification(sv_project_filepath, patient_number, clinical_dat
                                  out_func=None)
 
     alg = results[0]['output']
-    final_particles = alg.X  # Nube de partículas final
+    final_particles = alg.X  
 
     smc_results_files = "SMC_results"
     if not os.path.exists(smc_results_files):
@@ -153,7 +153,6 @@ def uncertainty_quantification(sv_project_filepath, patient_number, clinical_dat
     
     final_scores = np.zeros(final_particles.shape[0])
     for idx, p in enumerate(final_particles):
-        # Buscamos qué fila de las evaluadas originalmente corresponde a esta partícula final
         match_idx = np.where((raw_p == p).all(axis=1))[0][0]
         final_scores[idx] = raw_s[match_idx]
     
@@ -161,7 +160,7 @@ def uncertainty_quantification(sv_project_filepath, patient_number, clinical_dat
     scores_name = os.path.join(smc_results_files, f"smc_scores_pacs{patient_number:03d}.npy")
     
     np.save(result_name, final_particles)
-    np.save(scores_name, final_scores) # <--- Aquí tienes tus scores guardados exactos
+    np.save(scores_name, final_scores) 
     
     os.remove(os.path.join(smc_results_files, "temp_raw_particles.npy"))
     os.remove(os.path.join(smc_results_files, "temp_raw_scores.npy"))
