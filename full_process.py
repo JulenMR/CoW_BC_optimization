@@ -22,7 +22,7 @@ mapping_dict = {
         "L_MCA":6, "L_ACA":7, "R_ACA":8, "R_MCA":9, "R_PCA":10, "R_SCA":11,
     }
 
-def centerline_extraction(sv_project_filepath, merging_tolerances, extract_individual_centerlines):
+def centerline_extraction(sv_project_filepath, merging_tolerances, custom_cap_setting = None, extract_individual_centerlines = False):
 
     centerlines_file = os.path.join(sv_project_filepath, "ROMSimulations", "Centerlines")
     if not os.path.exists(centerlines_file):
@@ -45,7 +45,7 @@ def centerline_extraction(sv_project_filepath, merging_tolerances, extract_indiv
     face_mapping = dict(zip(df_caps['name'], df_caps['id'].astype(int)))
 
     if extract_individual_centerlines == True:
-        extract_individual_paths(input_model_file=input_file, face_mapping=face_mapping, save_file=centerlines_file, custom_objective_branches = None)
+        extract_individual_paths(input_model_file=input_file, face_mapping=face_mapping, save_file=centerlines_file, custom_objective_branches = custom_cap_setting)
 
     branch_files = glob.glob(os.path.join(centerlines_file, "indbr_*"))
 
@@ -183,10 +183,23 @@ if __name__ == "__main__":
     patient_number = 11
     sv_project_filepath = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-{patient_number:03d}"
     merging_tolerances = {
-         "General tolerance": 0.01,
-         "ACA tolerance": 0.015,
+         "General tolerance": 0.008,
+         "ACA tolerance": 0.008,
          "Spatial tolerance": 2.2
     }
+
+    # For PACS011
+    objective_branches = [
+        ("cap_L_ICA", "cap_L_MCA"),
+        ("cap_R_ICA", "cap_R_MCA"),
+        ("cap_L_SCA", "cap_L_MCA"),
+        ("cap_R_SCA", "cap_L_SCA"),
+        ("cap_L_VA", "cap_R_PCA"),
+        ("cap_R_VA", "cap_L_PCA"),
+        ("cap_L_MCA", "cap_R_MCA"),
+        ("cap_L_ACA", "cap_R_ACA")
+    ]
+    
 
     # Phase 2
     inflow_filepath = os.path.join(sv_project_filepath, "Simulations", "fine", f"{patient_number}_asl")
@@ -199,7 +212,8 @@ if __name__ == "__main__":
     ########################################################################################
     ### Functions
     # Phase 1
-    centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, extract_individual_centerlines = False)
+    centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, 
+                          custom_cap_setting= objective_branches, extract_individual_centerlines = True)
 
     # Phase 2
     # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
