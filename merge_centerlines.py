@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from individual_centerline import get_face_center
 import os
+
 def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, output_file, face_mapping, spatial_tolerance=0.2):
 
     # Phase 0: Get outlet points from each centerline
@@ -14,7 +15,7 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
             reader.SetFileName(f); reader.Update()
             poly_branch = reader.GetOutput()
             
-            # Count cow many cells are in contact
+            # Count how many cells are in contact
             local_connectivity = defaultdict(int)
             for i in range(poly_branch.GetNumberOfCells()):
                 cell_ids = poly_branch.GetCell(i).GetPointIds()
@@ -65,24 +66,40 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
 
     clean_poly = final_cleaner.GetOutput()
 
-    # Add ending nodes
     existing_points = clean_poly.GetPoints()
+    point_data = clean_poly.GetPointData()
+    
+    num_original_points = clean_poly.GetNumberOfPoints()
+    
     outlet_to_id = {}
+    points_to_connect = [] 
     
     for pt_orig in ending_nodes:
         found = False
-        for i in range(existing_points.GetNumberOfPoints()):
-            pt_act = existing_points.GetPoint(i)
+        for i in range(num_original_points):
+            pt_act = clean_poly.GetPoint(i)
             dist = ((pt_act[0] - pt_orig[0])**2 + (pt_act[1] - pt_orig[1])**2 + (pt_act[2] - pt_orig[2])**2)**0.5
+            
             if dist < spatial_tolerance:
-                existing_points.SetPoint(i, pt_orig)  
-                outlet_to_id[pt_orig] = i
+                new_id = existing_points.InsertNextPoint(pt_orig)
+                outlet_to_id[pt_orig] = new_id
+                points_to_connect.append((i, new_id))
+                
+                for k in range(point_data.GetNumberOfArrays()):
+                    arr = point_data.GetArray(k)
+                    if arr is not None:
+                        arr.InsertNextTuple(arr.GetTuple(i))
+                        
                 found = True
                 break
         
         if not found:
             new_id = existing_points.InsertNextPoint(pt_orig)
             outlet_to_id[pt_orig] = new_id
+            for k in range(point_data.GetNumberOfArrays()):
+                arr = point_data.GetArray(k)
+                if arr is not None:
+                    arr.InsertNextTuple(arr.GetTuple(0))
 
     unique_cells = vtk.vtkCellArray()
     existing_segments = set()
@@ -93,16 +110,6 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
         
         for j in range(n_ids - 1):
             p1, p2 = ids.GetId(j), ids.GetId(j+1)
-            
-            pt_1_coords = existing_points.GetPoint(p1)
-            pt_2_coords = existing_points.GetPoint(p2)
-            
-            for pt_orig, ext_id in outlet_to_id.items():
-                if ((pt_1_coords[0] - pt_orig[0])**2 + (pt_1_coords[1] - pt_orig[1])**2 + (pt_1_coords[2] - pt_orig[2])**2)**0.5 < spatial_tolerance:
-                    p1 = ext_id
-                if ((pt_2_coords[0] - pt_orig[0])**2 + (pt_2_coords[1] - pt_orig[1])**2 + (pt_2_coords[2] - pt_orig[2])**2)**0.5 < spatial_tolerance:
-                    p2 = ext_id
-
             if p1 == p2: continue  
 
             segment = tuple(sorted((p1, p2)))
@@ -112,6 +119,15 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
                 line.GetPointIds().SetId(0, p1)
                 line.GetPointIds().SetId(1, p2)
                 unique_cells.InsertNextCell(line)
+
+    for p_intern, p_cap in points_to_connect:
+        segment = tuple(sorted((p_intern, p_cap)))
+        if segment not in existing_segments:
+            existing_segments.add(segment)
+            line = vtk.vtkLine()
+            line.GetPointIds().SetId(0, p_intern)
+            line.GetPointIds().SetId(1, p_cap)
+            unique_cells.InsertNextCell(line)
 
     poly_unique = vtk.vtkPolyData()
     poly_unique.SetPoints(existing_points)
@@ -163,9 +179,10 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     mesh_orig = reader_mesh.GetOutput()
 
     target_centers = {}
-    print("\nFace center coordenates")
+    print("\nFace center coordinates")
     for name in MASTER_INFLOWS + MASTER_OUTFLOWS:
         fid = face_mapping.get(name)
+        #print(f"name: {name} | FID: {fid}")
         if fid:
             c = get_face_center(mesh_orig, "ModelFaceID", fid)
             if c:
@@ -175,8 +192,16 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     final_net = vtk.vtkPolyData()
     final_net.SetPoints(poly_prepared.GetPoints())
     final_cell_array = vtk.vtkCellArray()
-    branch_ids = vtk.vtkIntArray()
-    branch_ids.SetName("BranchID")
+    
+    # BranchID setting
+    branch_ids_cell = vtk.vtkIntArray()
+    branch_ids_cell.SetName("BranchID")
+
+    branch_ids_point = vtk.vtkIntArray()
+    branch_ids_point.SetName("BranchID")
+    branch_ids_point.SetNumberOfTuples(poly_prepared.GetNumberOfPoints())
+    for i in range(poly_prepared.GetNumberOfPoints()):
+        branch_ids_point.SetTuple1(i, -1) # Inicialización por defecto
 
     internal_count = 0
     seen_signatures = set()
@@ -193,14 +218,12 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
         min_d = float('inf')
         target_match = ""
 
-        # Spatial diagnostic
         for name, center in target_centers.items():
             dist = min(np.linalg.norm(p_start - center), np.linalg.norm(p_end - center))
             if dist < min_d:
                 min_d = dist
                 target_match = name
 
-        # Inflow and Outflow setting
         for idx, name in enumerate(MASTER_INFLOWS):
             if name in target_centers:
                 if min(np.linalg.norm(p_start - target_centers[name]), np.linalg.norm(p_end - target_centers[name])) < spatial_tolerance:
@@ -217,18 +240,22 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
 
         poly_line = vtk.vtkPolyLine()
         poly_line.GetPointIds().SetNumberOfIds(len(branch_pts))
-        for i, p_id in enumerate(branch_pts): poly_line.GetPointIds().SetId(i, p_id)
+        
+        for i, p_id in enumerate(branch_pts): 
+            poly_line.GetPointIds().SetId(i, p_id)
+            branch_ids_point.SetTuple1(p_id, assigned_id)
+
         final_cell_array.InsertNextCell(poly_line)
-        branch_ids.InsertNextValue(assigned_id)
+        branch_ids_cell.InsertNextValue(assigned_id)
 
-    # Phase 5: Set Nodetype, UsageTag and Radius
+    # Phase 5: Aray settings
     final_net.SetLines(final_cell_array)
-    final_net.GetCellData().AddArray(branch_ids)
+    final_net.GetCellData().AddArray(branch_ids_cell)
 
-    # Transfer all the pointdata fields
     final_net.GetPointData().PassData(poly_prepared.GetPointData())
+    final_net.GetPointData().AddArray(branch_ids_point)
 
-    # Create NodeType field
+    # Create NodeType
     node_type_array = vtk.vtkIntArray()
     node_type_array.SetName("NodeType")
     node_type_array.SetNumberOfTuples(final_net.GetNumberOfPoints())
@@ -236,7 +263,7 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
         node_type_array.SetTuple1(i, node_connectivity[i])
     final_net.GetPointData().AddArray(node_type_array)
 
-    # Set UsageTag
+    # Crete UsageTag field
     usage_tags = vtk.vtkIntArray()
     usage_tags.SetName("UsageTag")
     in_centers = [target_centers[n] for n in MASTER_INFLOWS if n in target_centers]
