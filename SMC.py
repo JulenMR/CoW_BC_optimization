@@ -22,6 +22,7 @@ from joblib import Parallel, delayed
 from create_3dsim_file import update_svfsi
 import matplotlib
 matplotlib.use('Agg')
+
 class VLikelihood(dists.ProbDist):
     def __init__(self, log_val):
         self.log_val = np.atleast_1d(log_val)
@@ -32,12 +33,17 @@ class VLikelihood(dists.ProbDist):
 
 progress_counter = None
 
+mapping_dict = {
+    "L_ICA":0, "R_ICA":1, "L_VA":2, "R_VA":3, "L_SCA":4, "L_PCA":5,
+    "L_MCA":6, "L_ACA":7, "R_ACA":8, "R_MCA":9, "R_PCA":10, "R_SCA":11,
+}
+
 def init_pool(counter):
     global progress_counter
     progress_counter = counter
 
 class RCR_UQ(ssm.StateSpaceModel):
-    def __init__(self, json_dict, active_rcr_ids, clinical_targets, branch_map, lbfgs_vals, error_tolerance, num_cores, **kwargs):
+    def __init__(self, json_dict, active_rcr_ids, clinical_targets, branch_map, lbfgs_vals, error_tolerance, num_cores, save_dir, **kwargs):
         super().__init__(**kwargs)
         self.json_base = json_dict
         self.active_ids = active_rcr_ids
@@ -47,6 +53,7 @@ class RCR_UQ(ssm.StateSpaceModel):
         self.lbfgs_vals = lbfgs_vals
         self.error_tolerance = error_tolerance
         self.num_cores = num_cores
+        self.save_dir = save_dir
 
     def PX0(self): # Prior
         priors = []
@@ -63,16 +70,17 @@ class RCR_UQ(ssm.StateSpaceModel):
         if N == 1:
             log_weights = np.array([self._evaluate_single_particle(x, 0)])
         else:
-            print(f"\n[SMC Paso {t}] Evaluando {N} partículas SECUENCIALMENTE...")
+            print(f"\n Evaluating {N} particles sequentially")
 
             log_weights = Parallel(n_jobs=1)(
                 delayed(self._evaluate_single_particle)(x[i], i) for i in range(N)
             )
             log_weights = np.array(log_weights)
 
-        os.makedirs("SMC_results", exist_ok=True)
-        np.save("SMC_results/temp_raw_particles.npy", x)
-        np.save("SMC_results/temp_raw_scores.npy", log_weights)
+        smc_result_file = os.path.join(self.save_dir, "ROMSimulations", "SMC_results")
+        os.makedirs(smc_result_file, exist_ok=True)
+        np.save(os.path.join(smc_result_file, "temp_raw_particles.npy"), x)
+        np.save(os.path.join(smc_result_file, "temp_raw_scores.npy"), log_weights)
         
         return VLikelihood(log_weights)
     
@@ -85,9 +93,7 @@ class RCR_UQ(ssm.StateSpaceModel):
             solver.run()
             df = solver.get_full_result()
             sim_mp, sim_pulse, sim_f = get_stats(df, self.active_ids)
-            
-            # 1. Creamos un diccionario inverso: mapea el ID numérico al nombre de la arteria
-            # Ejemplo: {0: 'L_ICA', 1: 'R_ICA', 2: 'L_VA', ...}
+
             id_to_branch = {v: k for k, v in self.branch_map.items()}
             
             rel_errors = []
@@ -110,56 +116,54 @@ class RCR_UQ(ssm.StateSpaceModel):
             log_liks[-2:] *= 2 
             final_score = np.sum(log_liks)
             
-            if particle_idx is not None and particle_idx % 20 == 0:
+            if particle_idx is not None and particle_idx % 40 == 0:
                 active_branches = [id_to_branch[uid] for uid in self.active_ids]
                 self._generate_debug_plot(particle_idx, active_branches, sim_f, sim_mp, sim_pulse, final_score)
                 # Añadimos flush=True para forzar la impresión inmediata
-                print(f"✅ Partícula {particle_idx} OK. Score: {final_score:.2f} (Gráfico guardado)", flush=True)
+                print(f"Particle {particle_idx} OK. Score: {final_score:.2f} graph saved", flush=True)
             
             return final_score
             
         except Exception as e:
-            if particle_idx is not None and particle_idx % 20 == 0:
-                # Añadimos flush=True aquí también
-                print(f"❌ Partícula {particle_idx} RECHAZADA. Error: {e}", flush=True)
-                os.makedirs("SMC_debug_plots", exist_ok=True)
-                with open(f"SMC_debug_plots/particula_{particle_idx}_RECHAZADA.txt", "w") as f:
-                    f.write(f"Estado: RECHAZADA\nError: {e}\n")
+            if particle_idx is not None:
+                print(f" Particle {particle_idx} rejected. Error: {e}", flush=True)
+                debug_file = os.path.join(self.save_dir, "ROMSimulations", "SMC_debug_plots")
+                os.makedirs(debug_file, exist_ok=True)
+                with open(os.path.join(debug_file, f"particle_{particle_idx}_rejected.txt", "w")) as f:
+                    f.write(f"State: Rejected\nError: {e}\n")
             return -1e10
 
     def _generate_debug_plot(self, idx, branches, sim_f, sim_mp, sim_pulse, score):
-        """Genera un reporte gráfico comparando la simulación con los datos clínicos."""
-        os.makedirs("SMC_debug_plots", exist_ok=True)
+        debug_file = os.path.join(self.save_dir, "ROMSimulations", "SMC_debug_plots")
+        os.makedirs(debug_file, exist_ok=True)
         
         fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-        fig.suptitle(f"Partícula Index {idx} - ACEPTADA (Score/LogLik: {score:.2f})", fontsize=14, fontweight='bold')
+        fig.suptitle(f"Particle Index {idx} - accepted (Score/LogLik: {score:.2f})", fontsize=14, fontweight='bold')
         
-        # 1. Gráfico de Flujos (Simulado vs Clínico)
         sim_flows = [sim_f[f"branch{self.active_ids[i]}"] for i in range(len(self.active_ids))]
         target_flows = [self.targets['flows'][b] for b in branches]
         
         x = np.arange(len(branches))
         width = 0.35
         
-        axes[0].bar(x - width/2, target_flows, width, label='Objetivo Clínico', color='#1f77b4')
-        axes[0].bar(x + width/2, sim_flows, width, label='Simulación 0D', color='#ff7f0e')
-        axes[0].set_ylabel('Flujo')
-        axes[0].set_title('Comparación de Flujos por Rama')
+        axes[0].bar(x - width/2, target_flows, width, label='Clinical target', color='#1f77b4')
+        axes[0].bar(x + width/2, sim_flows, width, label='0D Simulation', color='#ff7f0e')
+        axes[0].set_ylabel('Flow')
+        axes[0].set_title('Flow comparison per branch')
         axes[0].set_xticks(x)
         axes[0].set_xticklabels(branches, rotation=45, ha='right')
         axes[0].legend()
         axes[0].grid(axis='y', linestyle='--', alpha=0.7)
         
-        # 2. Gráfico de Presiones (Media y Pulso)
-        labels_p = ['Presión Media', 'Presión Pulso']
+        labels_p = ['Mean pressure', 'Pressure pulse']
         targets_p = [self.targets['mean_p'], self.targets['pulse']]
         sims_p = [sim_mp, sim_pulse]
         
         x_p = np.arange(len(labels_p))
         
-        axes[1].bar(x_p - width/2, targets_p, width, label='Objetivo Clínico', color='#1f77b4')
+        axes[1].bar(x_p - width/2, targets_p, width, label='Clinical target', color='#1f77b4')
         axes[1].bar(x_p + width/2, sims_p, width, label='Simulación 0D', color='#ff7f0e')
-        axes[1].set_ylabel('Presión (mmHg o equivalente)')
+        axes[1].set_ylabel('Pressure (mmHg)')
         axes[1].set_title('Presión Arterial Global')
         axes[1].set_xticks(x_p)
         axes[1].set_xticklabels(labels_p)
@@ -167,7 +171,7 @@ class RCR_UQ(ssm.StateSpaceModel):
         axes[1].grid(axis='y', linestyle='--', alpha=0.7)
         
         plt.tight_layout()
-        plt.savefig(f"SMC_debug_plots/particula_{idx}_ACEPTADA.png", dpi=150)
+        plt.savefig(os.path.join(debug_file, f"particle_{idx}_accepted.png"), dpi=150)
         plt.close()
 
     
@@ -204,7 +208,7 @@ def get_stats(df, active_rcr_ids):
         
     return np.mean(p_means), np.mean(p_pulses), outlet_stats
 
-def plot_corner_per_outlet(result_npy, active_rcr_ids, mapping_dict):
+def plot_corner_per_outlet(result_npy, active_rcr_ids, mapping_dict, save_dir, save=False):
     samples = np.load(result_npy)
     id_to_name = {v: k for k, v in mapping_dict.items()}
     labels = ["$R_p$", "$C$", "$R_d$"]
@@ -230,9 +234,12 @@ def plot_corner_per_outlet(result_npy, active_rcr_ids, mapping_dict):
                      fontweight='bold',
                      y=0.98)
         
-        plt.show()
+    if save:
+        save_path = os.path.join(save_dir, "ROMSimulations", "SMC_results", f"corner_plot.png")
+        plt.savefig(save_path)
+    plt.close()
 
-def plot_all_parameters(sv_project_file, result_npy, active_rcr_ids, mapping_dict, patient_num, save= False):
+def plot_all_parameters(sv_project_file, result_npy, active_rcr_ids, mapping_dict, patient_num, save=False):
     samples = np.load(result_npy)
     num_outlets = len(active_rcr_ids)
     
@@ -248,22 +255,33 @@ def plot_all_parameters(sv_project_file, result_npy, active_rcr_ids, mapping_dic
             idx = col * 3 + row
             data = samples[:, idx]
             
+            # Dibujar KDE
+            sns.kdeplot(data, ax=ax, fill=True, color=colors[row], alpha=0.4)
+            
+            # --- NUEVA LÓGICA: Calcular y dibujar la Moda ---
+            # Extraemos los datos de la línea KDE que acaba de dibujar seaborn
+            line = ax.lines[0]
+            kde_x, kde_y = line.get_xdata(), line.get_ydata()
+            mode_val = kde_x[np.argmax(kde_y)]
+            
+            # --- Estadísticas existentes ---
             p5 = np.percentile(data, 5)
             p95 = np.percentile(data, 95)
             media = np.mean(data)
             
-            # Dibujar KDE
-            sns.kdeplot(data, ax=ax, fill=True, color=colors[row], alpha=0.4)
-            
             # Líneas verticales
             ax.axvline(p5, color='black', linestyle=':', linewidth=1.5, alpha=0.6)
             ax.axvline(p95, color='black', linestyle=':', linewidth=1.5, alpha=0.6)
-            ax.axvline(media, color='black', linestyle='-', linewidth=1.5)
+            ax.axvline(media, color='black', linestyle='-', linewidth=1.5, label='Mean')
+            
+            # Dibujar la moda
+            ax.axvline(mode_val, color='magenta', linestyle='--', linewidth=1.5, label='Mode')
 
-            ticks = [p5, media, p95]
+            # Actualizar ticks
+            ticks = [p5, mode_val, p95]
             ax.set_xticks(ticks)
             
-            labels = [f"{p5:.3f}", f"{media:.3f}", f"{p95:.3f}"]
+            labels = [f"{p5:.3f}", f"{mode_val:.3f}", f"{p95:.3f}"]
             ax.set_xticklabels(labels, rotation=45, fontsize=9)
 
             if row == 0:
@@ -277,15 +295,13 @@ def plot_all_parameters(sv_project_file, result_npy, active_rcr_ids, mapping_dic
 
             ax.grid(axis='x', linestyle='--', alpha=0.3)
 
-    plt.suptitle(f"Posterior distributions for PACS{patient_num:03d}", 
+    plt.suptitle(f"Posterior distributions (Mean vs Mode) for PACS{patient_num:03d}", 
                  fontsize=22, fontweight='bold', y=0.98)
     
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.subplots_adjust(left=0.08, wspace=0.4, hspace=0.6) 
     if save:
-        save_path = os.path.join(sv_project_file, "ROMSimulations", f"uq_pacs{patient_num:03d}.png")
+        save_path = os.path.join(sv_project_file, "ROMSimulations", "SMC_results", f"uq_pacs{patient_num:03d}_mode.png")
         plt.savefig(save_path)
-        print(f"Posterior distribution image saved in {save_path}")
     plt.close()
 
 def _generate_debug_plot_custom(idx, branches, sim_f, sim_mp, sim_pulse, score, folder, targets, active_rcr_ids):
@@ -369,43 +385,40 @@ def validate_confidence_region(particles_npy, scores_npy, json_path, active_rcr_
         print(f"Partícula {i} visualizada. Score: {score:.2f}")
 
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
-    start_time = time.time()
-    patient_number = 5
-    clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/subject_targets.csv"
-    json_path = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-005/ROMSimulations/bc_optimization/bc_optimized.json"
-    sv_project_filepath = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-{patient_number:03d}"
-    particles_npy = "./SMC_results/smc_result_pacs005.npy"
-    scores_npy = "./SMC_results/smc_scores_pacs005.npy"
-    mapping_dict = {
-        "L_ICA":0, "R_ICA":1, "L_VA":2, "R_VA":3, "L_SCA":4, "L_PCA":5,
-        "L_MCA":6, "L_ACA":7, "R_ACA":8, "R_MCA":9, "R_PCA":10, "R_SCA":11,
-    }
-    num_particles = 2000
-    num_cores = 16
-    err_tolerance = 0.05
+#     start_time = time.time()
+#     patient_number = 5
+#     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/subject_targets.csv"
+#     json_path = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-005/ROMSimulations/bc_optimization/bc_optimized.json"
+#     sv_project_filepath = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-{patient_number:03d}"
+#     particles_npy = "./SMC_results/smc_result_pacs005.npy"
+#     scores_npy = "./SMC_results/smc_scores_pacs005.npy"
 
-    clinical_data  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
-    #center_particles, limit_particles = sample_particles(particles_npy, scores_npy, n_center=2, n_limit=6)
-    with open(json_path, 'r') as f: json_dict = json.load(f)
-    active_rcr_ids = []
-    deterministic_param_values = []
-    for i in range(4, 12):
-        bc_list = json_dict["boundary_conditions"]
-        try:
-            params = next(bc["bc_values"] for bc in bc_list if bc.get("bc_name") == f"RCR_{i}")
-            for n, val in enumerate(params.values()):
-                if n < 3:
-                  deterministic_param_values.append(round(val,6))
-            active_rcr_ids.append(i)
-        except StopIteration:
-            continue
+#     num_particles = 2000
+#     num_cores = 16
+#     err_tolerance = 0.05
 
-        # Llamada directa
-    # Llamada al script
-    validate_confidence_region("SMC_results/smc_result_pacs005.npy", 
-                           "SMC_results/smc_scores_pacs005.npy", 
-                           json_path, active_rcr_ids, clinical_data, mapping_dict, n_samples=5)
+#     clinical_data  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
+#     #center_particles, limit_particles = sample_particles(particles_npy, scores_npy, n_center=2, n_limit=6)
+#     with open(json_path, 'r') as f: json_dict = json.load(f)
+#     active_rcr_ids = []
+#     deterministic_param_values = []
+#     for i in range(4, 12):
+#         bc_list = json_dict["boundary_conditions"]
+#         try:
+#             params = next(bc["bc_values"] for bc in bc_list if bc.get("bc_name") == f"RCR_{i}")
+#             for n, val in enumerate(params.values()):
+#                 if n < 3:
+#                   deterministic_param_values.append(round(val,6))
+#             active_rcr_ids.append(i)
+#         except StopIteration:
+#             continue
+
+#         # Llamada directa
+#     # Llamada al script
+#     validate_confidence_region("SMC_results/smc_result_pacs005.npy", 
+#                            "SMC_results/smc_scores_pacs005.npy", 
+#                            json_path, active_rcr_ids, clinical_data, mapping_dict, n_samples=5)
     
 

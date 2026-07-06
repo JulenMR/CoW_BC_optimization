@@ -108,7 +108,7 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
     inp_optimized_path = os.path.join(opt_3D_simulation_file, "svFSI_optimized.inp")
     update_svfsi(json_path=optimized_json, inp_path="svFSI_base.inp", save_path = inp_optimized_path, mapping_dict=mapping_dict, timestep_size=tau_param)
 
-def uncertainty_quantification(sv_project_filepath, patient_number, clinical_data_file, num_particles, num_cores, error_tolerance, visualize= False, save= False):
+def SMC_calibration(sv_project_filepath, patient_number, clinical_data_file, num_particles, num_cores, error_tolerance, visualize= False, save= False):
 
     clinical_data  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
     json_path = os.path.join(sv_project_filepath, "ROMSimulations", "bc_optimization", "bc_optimized.json")
@@ -133,7 +133,8 @@ def uncertainty_quantification(sv_project_filepath, patient_number, clinical_dat
                        branch_map=mapping_dict, 
                        lbfgs_vals = deterministic_param_values,
                        error_tolerance= error_tolerance,
-                       num_cores=16)
+                       num_cores=16,
+                       save_dir=sv_project_filepath)
 
     fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
 
@@ -148,7 +149,7 @@ def uncertainty_quantification(sv_project_filepath, patient_number, clinical_dat
     alg = results[0]['output']
     final_particles = alg.X  
 
-    smc_results_files = "SMC_results"
+    smc_results_files = os.path.join(sv_project_filepath, "ROMSimulations", "SMC_results")
     if not os.path.exists(smc_results_files):
         os.makedirs(smc_results_files)
         
@@ -168,9 +169,17 @@ def uncertainty_quantification(sv_project_filepath, patient_number, clinical_dat
     
     os.remove(os.path.join(smc_results_files, "temp_raw_particles.npy"))
     os.remove(os.path.join(smc_results_files, "temp_raw_scores.npy"))
-    
+
+    # Best result
+    idx_optimum = np.argmax(final_scores)
+    parametros_optimos = final_particles[idx_optimum]
+    mejor_score = final_scores[idx_optimum]
+
+    print(f"Best SMC parameters found are: {parametros_optimos}")
+    print(f"With a score of: {mejor_score}")
     print(f"SMC was successfull. {alg.X.shape[0]} particles for {alg.X.shape[1]} parameters were created.")
     if visualize == True:
+         plot_corner_per_outlet(result_npy=result_name, active_rcr_ids=active_rcr_ids, mapping_dict=mapping_dict, save_dir=sv_project_filepath, save=True)
          plot_all_parameters(sv_project_file= sv_project_filepath, result_npy = result_name, active_rcr_ids = active_rcr_ids, 
                              mapping_dict = mapping_dict, patient_num=patient_number, save= save)
 
@@ -212,15 +221,15 @@ if __name__ == "__main__":
     ########################################################################################
     ### Functions
     # Phase 1
-    centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, 
-                          custom_cap_setting= objective_branches, extract_individual_centerlines = False)
+    # centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, 
+    #                       custom_cap_setting= objective_branches, extract_individual_centerlines = False)
 
     # Phase 2
     # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
     #                 clinical_data_csv = clinical_data_file, visualize=True)
 
     # Phase 3
-    # uncertainty_quantification(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
-    #                            num_particles = num_particles, num_cores = num_cores, error_tolerance = err_tolerance, visualize=False, save=True)
+    SMC_calibration(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
+                               num_particles = num_particles, num_cores = num_cores, error_tolerance = err_tolerance, visualize=True, save=True)
 
 
