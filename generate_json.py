@@ -17,7 +17,7 @@ def read_flow_file(path):
         }
     return {"t": [0.0, 1.0], "Q": [0.5, 0.5]}
 
-def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_values=None, tau = None):
+def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_value = 0.004, flow_files=None, rcr_values=None, tau = None):
 
     if not os.path.exists(vtp_path):
         print(f"Error: File not found at {vtp_path}")
@@ -93,7 +93,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
             "number_of_time_pts_per_cardiac_cycle": last_t,
             "time_step_size": 0.001,
             "output_all_cycles": False,
-            "density": 0.00106, "viscosity": 0.004,
+            "density": 0.00106, "viscosity": viscosity_value,
             "model_name": "Multi_Inlet_Model",
             "steady_initial": True,
             "sim_cycle_to_cycle_percent_error": 0.5,
@@ -109,7 +109,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, flow_files=None, rcr_val
             "vessel_id": b_id, "vessel_name": f"branch{b_id}",
             "vessel_length": data['length'], "zero_d_element_type": "BloodVessel",
             "zero_d_element_values": { # Applies Poiseuilles laws to get R, C, L
-                "R_poiseuille": (8.0 * 0.004 * data['length']) / (np.pi * data['radius']**4), 
+                "R_poiseuille": (8.0 * viscosity_value * data['length']) / (np.pi * data['radius']**4), 
                 "L": 0, #(0.00106 * data['length']) / (np.pi * data['radius']**2),
                 "C": (3.0 * data['length'] * np.pi * data['radius']**3) / (2 * E*h),
                 "stenosis_coefficient": 0.0

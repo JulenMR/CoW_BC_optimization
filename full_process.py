@@ -56,7 +56,7 @@ def centerline_extraction(sv_project_filepath, merging_tolerances, custom_cap_se
     centerline_merging(branch_files=branch_files, input_model_file=input_file, output_file=final_centerline_file,
                         face_mapping = face_mapping, tol_general=general_tolerance, tol_aca = aca_tolerance, spatial_tolerance=spatial_tolerance)
     
-def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clinical_data_csv, visualize = False):
+def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clinical_data_csv, viscosity_value = 0.004, visualize = False):
 
     bc_optimization_file = os.path.join(sv_project_filepath, "ROMSimulations", "bc_optimization")
     if not os.path.exists(bc_optimization_file):
@@ -64,7 +64,7 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
             print(f"Created filepath: {bc_optimization_file}")    
     
     final_centerline_file = os.path.join(sv_project_filepath, "ROMSimulations", "Centerlines", "centerline_final.vtp")
-    initial_json_file = os.path.join(bc_optimization_file, "initial_zeroD_script.json")
+    initial_json_file = os.path.join(bc_optimization_file, "initial_zeroD_script_2.json")
 
     # Inflow smoothing 
     opt_3D_simulation_file = os.path.join(sv_project_filepath, "Simulations", "fine", f"{patient_number}_optimized_BC")
@@ -82,7 +82,7 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
     tau_param = np.round(flow_data[-1, 0],3)
     print(tau_param)
 
-    my_rcrs = get_initial_BC(clinical_data_file=clinical_data_csv, patient_number=patient_number,
+    my_rcrs = get_initial_BC(clinical_data_file=clinical_data_csv, patient_number=patient_number, 
                              mapping_dict=mapping_dict, tau=tau_param)    
     my_flows = {
         0: carotid_left_flow,
@@ -91,13 +91,13 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
         3: vertebral_right_flow
     }
     segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(vtp_path= final_centerline_file, output_path = initial_json_file, 
-                                                                                    flow_files=my_flows, rcr_values=my_rcrs, tau=tau_param)
+                                                                                    viscosity_value = viscosity_value, flow_files=my_flows, rcr_values=my_rcrs, tau=tau_param)
     if visualize == True:
          save_path = os.path.join(sv_project_filepath, "ROMSimulations", "Centerlines", f"graph_{patient_number:03d}.png")
          visualize_graph(final_segments= segments, pos_to_node = pos_to_node, inlet_nodes = inlet_nodes, outlet_nodes = outlet_nodes, 
                          patient_num= patient_number, save_path = save_path)
 
-    optimized_json = os.path.join(bc_optimization_file, "bc_optimized.json")
+    optimized_json = os.path.join(bc_optimization_file, "bc_optimized_2.json")
     clinical_data = get_clinical_data(file=clinical_data_file, p_number=patient_number)
     opt_json = run_optimization(initial_json_file, clinical_data, mapping_dict)
     
@@ -108,7 +108,7 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
     inp_optimized_path = os.path.join(opt_3D_simulation_file, "svFSI_optimized.inp")
     update_svfsi(json_path=optimized_json, inp_path="svFSI_base.inp", save_path = inp_optimized_path, mapping_dict=mapping_dict, timestep_size=tau_param)
 
-def SMC_calibration(sv_project_filepath, patient_number, clinical_data_file, num_particles, num_cores, error_tolerance, visualize= False, save= False):
+def SMC_calibration(sv_project_filepath, patient_number, clinical_data_file, num_particles, error_tolerance, visualize= False):
 
     clinical_data  = get_clinical_data(file=clinical_data_file, p_number=patient_number)
     json_path = os.path.join(sv_project_filepath, "ROMSimulations", "bc_optimization", "bc_optimized.json")
@@ -131,61 +131,57 @@ def SMC_calibration(sv_project_filepath, patient_number, clinical_data_file, num
                        active_rcr_ids=active_rcr_ids, 
                        clinical_targets=clinical_data, 
                        branch_map=mapping_dict, 
-                       lbfgs_vals = deterministic_param_values,
-                       error_tolerance= error_tolerance,
-                       num_cores=16,
-                       save_dir=sv_project_filepath)
+                       lbfgs_vals=deterministic_param_values,
+                       error_tolerance=error_tolerance,
+                       save_dir=sv_project_filepath) # num_cores ya no es necesario aquí
 
     fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
 
-    print(f"Quantifying Uncertainty executing Sequential Monte Carlo with {num_particles} particles in {num_cores} cores")
+    print(f"Quantifying Uncertainty executing Sequential Monte Carlo with {num_particles} particles (Secuencial)")
 
     results = particles.multiSMC(fk=fk_boot, 
                                  N=num_particles, 
                                  nruns=1, 
-                                 nprocs=num_cores, 
+                                 nprocs=1, 
                                  out_func=None)
 
     alg = results[0]['output']
     final_particles = alg.X  
+    final_scores = alg.W
 
     smc_results_files = os.path.join(sv_project_filepath, "ROMSimulations", "SMC_results")
     if not os.path.exists(smc_results_files):
         os.makedirs(smc_results_files)
-        
-    raw_p = np.load(os.path.join(smc_results_files, "temp_raw_particles.npy"))
-    raw_s = np.load(os.path.join(smc_results_files, "temp_raw_scores.npy"))
-    
-    final_scores = np.zeros(final_particles.shape[0])
-    for idx, p in enumerate(final_particles):
-        match_idx = np.where((raw_p == p).all(axis=1))[0][0]
-        final_scores[idx] = raw_s[match_idx]
-    
     result_name = os.path.join(smc_results_files, f"smc_result_pacs{patient_number:03d}.npy")
     scores_name = os.path.join(smc_results_files, f"smc_scores_pacs{patient_number:03d}.npy")
     
     np.save(result_name, final_particles)
     np.save(scores_name, final_scores) 
     
-    os.remove(os.path.join(smc_results_files, "temp_raw_particles.npy"))
-    os.remove(os.path.join(smc_results_files, "temp_raw_scores.npy"))
-
     # Best result
     idx_optimum = np.argmax(final_scores)
-    parametros_optimos = final_particles[idx_optimum]
+    optimum_params = final_particles[idx_optimum]
     mejor_score = final_scores[idx_optimum]
 
-    print(f"Best SMC parameters found are: {parametros_optimos}")
+    final_json = copy.deepcopy(json_dict)
+    update_all_outlets(final_json, optimum_params, active_rcr_ids)
+
+    optimized_json = os.path.join(smc_results_files, "smc_optimized.json")
+    with open(optimized_json, "w") as f:
+        json.dump(final_json, f, indent=4)
+    print(f"\nOptimization finalized. JSON File saved in {optimized_json}")
+
+    print(f"Best SMC parameters found are: {optimum_params}")
     print(f"With a score of: {mejor_score}")
     print(f"SMC was successfull. {alg.X.shape[0]} particles for {alg.X.shape[1]} parameters were created.")
     if visualize == True:
          plot_corner_per_outlet(result_npy=result_name, active_rcr_ids=active_rcr_ids, mapping_dict=mapping_dict, save_dir=sv_project_filepath, save=True)
          plot_all_parameters(sv_project_file= sv_project_filepath, result_npy = result_name, active_rcr_ids = active_rcr_ids, 
-                             mapping_dict = mapping_dict, patient_num=patient_number, save= save)
+                             mapping_dict = mapping_dict, patient_num=patient_number, save= True)
 
 
 if __name__ == "__main__":
-
+    start_time = time.time()
     #######################################################################################
     ### Parameter Selection
     # Phase 1
@@ -215,8 +211,7 @@ if __name__ == "__main__":
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/subject_targets.csv"
 
     # Phase 3
-    num_particles = 2000
-    num_cores = 16
+    num_particles = 5000
     err_tolerance = 0.05
     ########################################################################################
     ### Functions
@@ -225,11 +220,13 @@ if __name__ == "__main__":
     #                       custom_cap_setting= objective_branches, extract_individual_centerlines = False)
 
     # Phase 2
-    # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
-    #                 clinical_data_csv = clinical_data_file, visualize=True)
+    bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
+                    viscosity_value=0.0069, clinical_data_csv = clinical_data_file, visualize=True)
 
     # Phase 3
-    SMC_calibration(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
-                               num_particles = num_particles, num_cores = num_cores, error_tolerance = err_tolerance, visualize=True, save=True)
+    # SMC_calibration(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
+    #                            num_particles = num_particles, error_tolerance = err_tolerance, visualize=True)
+    # print("--- %s seconds ---" % (time.time() - start_time))
+
 
 
