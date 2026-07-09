@@ -167,6 +167,7 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
             segmented_cells.append(list(current_branch))
 
     # Phase 4: Generate BranchIDs and Inflow/Outflow
+    # Phase 4: Generate BranchIDs and Inflow/Outflow
     MASTER_INFLOWS = ["cap_L_ICA", "cap_R_ICA", "cap_L_VA", "cap_R_VA"]
     MASTER_OUTFLOWS = ["cap_L_SCA", "cap_L_PCA", "cap_L_MCA", "cap_L_ACA", "cap_R_ACA", "cap_R_MCA", "cap_R_PCA", "cap_R_SCA"]
 
@@ -182,78 +183,104 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     print("\nFace center coordinates")
     for name in MASTER_INFLOWS + MASTER_OUTFLOWS:
         fid = face_mapping.get(name)
-        #print(f"name: {name} | FID: {fid}")
         if fid:
             c = get_face_center(mesh_orig, "ModelFaceID", fid)
             if c:
                 target_centers[name] = np.array(c)
                 print(f"FACE {fid:<3} | {name:<3} : ({c[0]:.4f}, {c[1]:.4f}, {c[2]:.4f})")
 
-    final_net = vtk.vtkPolyData()
-    final_net.SetPoints(poly_prepared.GetPoints())
-    final_cell_array = vtk.vtkCellArray()
-    
-    # BranchID setting
-    branch_ids_cell = vtk.vtkIntArray()
-    branch_ids_cell.SetName("BranchID")
-
+    # Inicializar Arrays de BranchID
     branch_ids_point = vtk.vtkIntArray()
     branch_ids_point.SetName("BranchID")
     branch_ids_point.SetNumberOfTuples(poly_prepared.GetNumberOfPoints())
     for i in range(poly_prepared.GetNumberOfPoints()):
-        branch_ids_point.SetTuple1(i, -1) # Inicialización por defecto
+        branch_ids_point.SetTuple1(i, -1)
 
     internal_count = 0
-    seen_signatures = set()
+    
+    # 1. Agrupar segmentos por BranchID
+    segments_by_id = defaultdict(list)
 
-    for b_idx, branch_pts in enumerate(segmented_cells):
-        signature = tuple(sorted((branch_pts[0], branch_pts[-1])))
-        if signature in seen_signatures: continue
-        seen_signatures.add(signature)
-
+    for branch_pts in segmented_cells:
         p_start = np.array(poly_prepared.GetPoints().GetPoint(branch_pts[0]))
         p_end = np.array(poly_prepared.GetPoints().GetPoint(branch_pts[-1]))
         
         assigned_id = None
         min_d = float('inf')
-        target_match = ""
 
-        for name, center in target_centers.items():
-            dist = min(np.linalg.norm(p_start - center), np.linalg.norm(p_end - center))
-            if dist < min_d:
-                min_d = dist
-                target_match = name
-
+        # Asignación de Inflows
         for idx, name in enumerate(MASTER_INFLOWS):
             if name in target_centers:
-                if min(np.linalg.norm(p_start - target_centers[name]), np.linalg.norm(p_end - target_centers[name])) < spatial_tolerance:
+                dist = min(np.linalg.norm(p_start - target_centers[name]), np.linalg.norm(p_end - target_centers[name]))
+                if dist < spatial_tolerance:
                     assigned_id = idx; break
+        
+        # Asignación de Outflows
         if assigned_id is None:
             for idx, name in enumerate(MASTER_OUTFLOWS):
                 if name in target_centers:
-                    if min(np.linalg.norm(p_start - target_centers[name]), np.linalg.norm(p_end - target_centers[name])) < spatial_tolerance:
+                    dist = min(np.linalg.norm(p_start - target_centers[name]), np.linalg.norm(p_end - target_centers[name]))
+                    if dist < spatial_tolerance:
                         assigned_id = idx + ID_OFFSET_OUTFLOWS; break
 
+        # Asignación Interna
         if assigned_id is None:
             assigned_id = internal_count + ID_OFFSET_INTERNAL
             internal_count += 1
 
-        poly_line = vtk.vtkPolyLine()
-        poly_line.GetPointIds().SetNumberOfIds(len(branch_pts))
+        segments_by_id[assigned_id].append(branch_pts)
+
+    # 2. Unir topológicamente los segmentos por ID y crear las celdas finales
+    final_cell_array = vtk.vtkCellArray()
+    branch_ids_cell = vtk.vtkIntArray()
+    branch_ids_cell.SetName("BranchID")
+
+    for b_id, sub_segments in segments_by_id.items():
+        if not sub_segments:
+            continue
+            
+        # Fusión topológica de las secuencias de puntos
+        merged_path = list(sub_segments[0])
+        unused_segments = sub_segments[1:]
         
-        for i, p_id in enumerate(branch_pts): 
+        while unused_segments:
+            progress = False
+            for i, seg in enumerate(unused_segments):
+                if merged_path[-1] == seg[0]:
+                    merged_path.extend(seg[1:])
+                    unused_segments.pop(i); progress = True; break
+                elif merged_path[0] == seg[-1]:
+                    merged_path = seg[:-1] + merged_path
+                    unused_segments.pop(i); progress = True; break
+                elif merged_path[-1] == seg[-1]: # Sentido invertido
+                    merged_path.extend(reversed(seg[:-1]))
+                    unused_segments.pop(i); progress = True; break
+                elif merged_path[0] == seg[0]: # Sentido invertido al inicio
+                    merged_path = list(reversed(seg[1:])) + merged_path
+                    unused_segments.pop(i); progress = True; break
+            
+            if not progress:
+                # Si entra aquí, hay segmentos con el mismo ID que están desconectados físicamente.
+                # Se fuerza la adición para no perder datos, aunque creará un "salto" en la polyline.
+                merged_path.extend(unused_segments[0])
+                unused_segments.pop(0)
+
+        # Crear una ÚNICA polyline para este ID
+        poly_line = vtk.vtkPolyLine()
+        poly_line.GetPointIds().SetNumberOfIds(len(merged_path))
+        
+        for i, p_id in enumerate(merged_path): 
             poly_line.GetPointIds().SetId(i, p_id)
-            branch_ids_point.SetTuple1(p_id, assigned_id)
+            branch_ids_point.SetTuple1(p_id, b_id)
 
         final_cell_array.InsertNextCell(poly_line)
-        branch_ids_cell.InsertNextValue(assigned_id)
+        branch_ids_cell.InsertNextValue(b_id)
 
     # Phase 5: Aray settings
+    final_net = vtk.vtkPolyData()
+    final_net.SetPoints(poly_prepared.GetPoints())
     final_net.SetLines(final_cell_array)
     final_net.GetCellData().AddArray(branch_ids_cell)
-
-    final_net.GetPointData().PassData(poly_prepared.GetPointData())
-    final_net.GetPointData().AddArray(branch_ids_point)
 
     # Create NodeType
     node_type_array = vtk.vtkIntArray()

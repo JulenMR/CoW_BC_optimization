@@ -37,7 +37,7 @@ def centerline_extraction(sv_project_filepath, merging_tolerances, custom_cap_se
     if not os.path.exists(ModelFaceID_file):
         raise FileNotFoundError(f"Model not found! Remember that the name has to be cow_faceID.mdl")
 
-    final_centerline_file = os.path.join(centerlines_file, "centerline_final_3.vtp")
+    final_centerline_file = os.path.join(centerlines_file, "centerline_final.vtp")
 
     # Face mapping
     df_faceID = pd.read_xml(ModelFaceID_file, xpath=".//face", parser="etree")
