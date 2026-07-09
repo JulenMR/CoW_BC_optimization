@@ -205,6 +205,7 @@ if __name__ == "__main__":
         ("cap_L_ACA", "cap_R_ACA")
     ]
     
+    
 
     # Phase 2
     inflow_filepath = os.path.join(sv_project_filepath, "Simulations", "fine", f"{patient_number}_asl")
@@ -217,7 +218,7 @@ if __name__ == "__main__":
     ### Functions
     # Phase 1
     centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, 
-                          custom_cap_setting= objective_branches, extract_individual_centerlines = False)
+                          custom_cap_setting= None, extract_individual_centerlines = True)
 
     # Phase 2
     # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
