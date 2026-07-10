@@ -32,7 +32,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_value = 0.004,
     reader.Update()
     polydata = reader.GetOutput()
 
-    # PHASE 1: EXTRACTION 
+    ### Phase 1: Extraction 
     branch_ids = numpy_support.vtk_to_numpy(polydata.GetCellData().GetArray("BranchID"))
     usage_tags = numpy_support.vtk_to_numpy(polydata.GetPointData().GetArray("UsageTag"))
     radii = numpy_support.vtk_to_numpy(polydata.GetPointData().GetArray("MaximumInscribedSphereRadius"))
@@ -65,7 +65,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_value = 0.004,
             if tag == 1: inlet_nodes.add(get_node(p_id)) # Save inlets
             elif tag == 2: outlet_nodes.add(get_node(p_id)) # Save outlets
 
-    # PHASE 2: ORIENTATION with Breadth First Search algorithm
+    ### Phase 2: orientetion with Breadth First Search algorithm
     final_segments = {}
     queue = deque(list(inlet_nodes)) # The BFS starts with inlets in the queue
     while queue:
@@ -85,7 +85,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_value = 0.004,
                 br['oriented'] = True # Sets that branch as oriented
                 queue.append(n_out) # Adds the outlet node to the queue
 
-    # PHASE 3: JSON ASSEMBLY
+    ### Phase 3: JSON assembly
     last_t = int(tau*1000)
     model_0d = {
         "simulation_parameters": {
@@ -262,47 +262,5 @@ def get_initial_BC(clinical_data_file, patient_number, mapping_dict, tau = 1.022
 
     return my_rcrs
 
-if __name__ == "__main__":
-
-    patient_number = 5
-    model_path = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/pacs-scd-{patient_number:03d}/Models"
-    centerlines = os.path.join(model_path, "CENTERLINE", "centerline_final.vtp")
-    zeroD_simulation_file = os.path.join(model_path, "zeroD_simulation")
-    if not os.path.exists(zeroD_simulation_file):
-            os.makedirs(zeroD_simulation_file)
-            print(f"Created filepath: {zeroD_simulation_file}")
-    output_file = os.path.join(zeroD_simulation_file, "zeroD_script.json")
-    clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Laras_models/corrected_subject_targets.csv"
-
-
-    carotid_left_flow = os.path.join(zeroD_simulation_file, "LICA_smooth.dat")
-    carotid_right_flow = os.path.join(zeroD_simulation_file, "RICA_smooth.dat")
-    vertebral_left_flow = os.path.join(zeroD_simulation_file, "LVA_smooth.dat")
-    vertebral_right_flow = os.path.join(zeroD_simulation_file, "RVA_smooth.dat")
-
-    flow_data = np.loadtxt(carotid_left_flow)
-    tau_param = np.round(flow_data[-1, 0],3)
-    print(f"tau: {tau_param}")
-    mapping_dict = {
-        "SCA_L":4,
-        "PCA_L":5,
-        "MCA_L":6,
-        "ACA_L":7,
-        "ACA_R":8,
-        "MCA_R":9,
-        "PCA_R":10,
-        "SCA_R":11,
-    }
-
-    my_rcrs = get_initial_BC(clinical_data_file=clinical_data_file, patient_number=patient_number, mapping_dict = mapping_dict, tau=tau_param)
-    my_flows = {
-        0: carotid_left_flow,
-        1: carotid_right_flow,
-        2: vertebral_left_flow,
-        3: vertebral_right_flow
-    }
-
-    segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(centerlines, output_file, my_flows, my_rcrs, tau=tau_param)
-    #visualize_graph(segments, pos_to_node, inlet_nodes, outlet_nodes)
 
                           
