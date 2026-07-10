@@ -181,7 +181,6 @@ def SMC_calibration(sv_project_filepath, patient_number, clinical_data_file, num
 
 
 if __name__ == "__main__":
-    start_time = time.time()
     #######################################################################################
     ### Parameter Selection
     # Phase 1
@@ -210,6 +209,7 @@ if __name__ == "__main__":
     # Phase 2
     inflow_filepath = os.path.join(sv_project_filepath, "Simulations", "fine", f"{patient_number}_asl")
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/subject_targets.csv"
+    viscosity_value=0.004
 
     # Phase 3
     num_particles = 5000
@@ -222,12 +222,11 @@ if __name__ == "__main__":
 
     # Phase 2
     # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
-    #                 viscosity_value=0.0069, clinical_data_csv = clinical_data_file, visualize=True)
+    #                 viscosity_value=viscosity_value, clinical_data_csv = clinical_data_file, visualize=True)
 
     # Phase 3
     # SMC_calibration(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
     #                            num_particles = num_particles, error_tolerance = err_tolerance, visualize=True)
-    # print("--- %s seconds ---" % (time.time() - start_time))
 
 
 
