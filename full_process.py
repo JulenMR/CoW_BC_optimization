@@ -37,7 +37,7 @@ def centerline_extraction(sv_project_filepath, merging_tolerances, custom_cap_se
     if not os.path.exists(ModelFaceID_file):
         raise FileNotFoundError(f"Model not found! Remember that the name has to be cow_faceID.mdl")
 
-    final_centerline_file = os.path.join(centerlines_file, "centerline_final_2.vtp")
+    final_centerline_file = os.path.join(centerlines_file, "centerline_final.vtp")
 
     # Face mapping
     df_faceID = pd.read_xml(ModelFaceID_file, xpath=".//face", parser="etree")
@@ -133,7 +133,7 @@ def SMC_calibration(sv_project_filepath, patient_number, clinical_data_file, num
                        branch_map=mapping_dict, 
                        lbfgs_vals=deterministic_param_values,
                        error_tolerance=error_tolerance,
-                       save_dir=sv_project_filepath) # num_cores ya no es necesario aquí
+                       save_dir=sv_project_filepath) 
 
     fk_boot = ssm.Bootstrap(ssm=rcr_model, data=np.zeros(1))
 
@@ -184,11 +184,11 @@ if __name__ == "__main__":
     #######################################################################################
     ### Parameter Selection
     # Phase 1
-    patient_number = 8
+    patient_number = 1
     sv_project_filepath = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-{patient_number:03d}"
     merging_tolerances = {
-         "General tolerance": 0.012,
-         "ACA tolerance": 0.012,
+         "General tolerance": 0.0085,
+         "ACA tolerance": 0.0085,
          "Spatial tolerance": 2.0
     }
 
@@ -203,8 +203,19 @@ if __name__ == "__main__":
         ("cap_L_MCA", "cap_R_MCA"),
         ("cap_L_ACA", "cap_R_ACA")
     ]
-    
-    
+    # for PACS001
+    objective_branches = [
+            ("cap_L_ICA", "cap_L_MCA"),
+            ("cap_R_ICA", "cap_R_MCA"),
+            ("cap_L_SCA", "cap_L_MCA"),
+            ("cap_R_SCA", "cap_R_MCA"),
+            ("cap_L_VA", "cap_R_PCA"),
+            ("cap_R_VA", "cap_L_PCA"),
+            ("cap_L_MCA", "cap_R_MCA"),
+            ("cap_L_ACA", "cap_R_ACA"),
+            ("cap_L_MCA", "cap_L_ACA"),
+            ("cap_R_MCA", "cap_R_ACA")
+    ]
 
     # Phase 2
     inflow_filepath = os.path.join(sv_project_filepath, "Simulations", "fine", f"{patient_number}_asl")
@@ -217,12 +228,12 @@ if __name__ == "__main__":
     ########################################################################################
     ### Functions
     # Phase 1
-    centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, 
-                          custom_cap_setting= None, extract_individual_centerlines = False)
+    # centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, 
+    #                       custom_cap_setting= objective_branches, extract_individual_centerlines = False)
 
     # Phase 2
-    # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
-    #                 viscosity_value=viscosity_value, clinical_data_csv = clinical_data_file, visualize=True)
+    bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
+                    viscosity_value=viscosity_value, clinical_data_csv = clinical_data_file, visualize=False)
 
     # Phase 3
     # SMC_calibration(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
