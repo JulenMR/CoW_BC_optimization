@@ -284,6 +284,9 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     final_net.SetPoints(poly_prepared.GetPoints())
     final_net.SetLines(final_cell_array)
     final_net.GetCellData().AddArray(branch_ids_cell)
+    # Add individual branch data
+    final_net.GetPointData().PassData(poly_prepared.GetPointData())
+    final_net.GetPointData().AddArray(branch_ids_point)
 
     # Create NodeType
     node_type_array = vtk.vtkIntArray()

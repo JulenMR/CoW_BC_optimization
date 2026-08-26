@@ -184,11 +184,11 @@ if __name__ == "__main__":
     #######################################################################################
     ### Parameter Selection
     # Phase 1
-    patient_number = 1
+    patient_number = 8
     sv_project_filepath = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-{patient_number:03d}"
     merging_tolerances = {
-         "General tolerance": 0.0085,
-         "ACA tolerance": 0.0085,
+         "General tolerance": 0.01,
+         "ACA tolerance": 0.012,
          "Spatial tolerance": 2.0
     }
 
@@ -228,12 +228,12 @@ if __name__ == "__main__":
     ########################################################################################
     ### Functions
     # Phase 1
-    # centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, 
-    #                       custom_cap_setting= objective_branches, extract_individual_centerlines = False)
+    centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, 
+                          custom_cap_setting= None, extract_individual_centerlines = False)
 
     # Phase 2
-    bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
-                    viscosity_value=viscosity_value, clinical_data_csv = clinical_data_file, visualize=False)
+    # bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
+    #                 viscosity_value=viscosity_value, clinical_data_csv = clinical_data_file, visualize=False)
 
     # Phase 3
     # SMC_calibration(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
