@@ -75,6 +75,7 @@ The script expects the standard SimVascular project structure. Ensure the follow
 with 2 columns, the first one for the time steps and the second for the flow values in mL/s.
 * *clinical_data_file*: A csv file that collects the clinical data from the patient.
 * *Viscosity*: Specific value of the viscosity of that patient.
+  
 **Phase 3**
 * *num_particles*: Is the number of samples used in the Sequential Monte Carlo (SMC) process.
 * *num_cores*: The SMC process can be parallelized. This parameter defines the number of cores used.
