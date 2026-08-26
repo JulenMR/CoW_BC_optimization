@@ -73,20 +73,18 @@ The script expects the standard SimVascular project structure. Ensure the follow
 **Phase 2**
 * *inflow_filepath*: Path were the inlet flow documents are located. 4 files are expected in the folder, one for each CoW inlet: LICA.dat, RICA.dat, LVA.dat and RVA.dat. These files need to respect the structure suported from Simvascular,
 with 2 columns, the first one for the time steps and the second for the flow values in mL/s.
-* *clinical_data_file*: A csv file that collects the clinical data from the patient.
+* *clinical_data_file*: A csv file that collects the clinical data from the patient. The clinical_data_file (.csv) must follow the this exact column structure and outlet naming convention shown in the following example (Pressure in mmHg, Flows in mL/s):
+
+| subject | HR   | SBP   | DBP  | R_ACA | L_ACA | R_MCA | L_MCA | R_PCA | L_PCA | R_SCA | L_SCA |
+|---------|------|-------|------|-------|-------|-------|-------|-------|-------|-------|-------|
+| 1       | 82.3 | 122   | 86   | 0.86  | 0.88  | 1.83  | 2.05  | 0.36  | 0.37  | 0.16  | 0.23  |
+
 * *Viscosity*: Specific value of the viscosity of that patient.
   
 **Phase 3**
 * *num_particles*: Is the number of samples used in the Sequential Monte Carlo (SMC) process.
 * *num_cores*: The SMC process can be parallelized. This parameter defines the number of cores used.
 * *err_tolerance*: The standard deviation from the normal function that represents the likelihood in the SMC. In other words, it represents the acceptable error percentage between the simulations and clinical data.
+
 ### Observations
 Units: The pipeline assumes scales in mmgs (mm, g, s).
-
-The clinical_data_file (.csv) must follow the this exact column structure and naming convention (Pressure in mmHg, Flows in mL/s):
-
-| subject | HR   | SBP   | DBP  | R_ACA | L_ACA | R_MCA | L_MCA | R_PCA | L_PCA | R_SCA | L_SCA |
-|---------|------|-------|------|-------|-------|-------|-------|-------|-------|-------|-------|
-| 1       | 82.3 | 122   | 86   | 0.86  | 0.88  | 1.83  | 2.05  | 0.36  | 0.37  | 0.16  | 0.23  |
-
-
