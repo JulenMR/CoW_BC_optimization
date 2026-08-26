@@ -4,22 +4,21 @@ This pipeline provides optimized Boundary Condition (BC) parameters that match c
 The code is designed to work inside a Simvasclar project file structure and outputs optimized 3-Element Windkessel parameters (Rd, C, Rp) for each CoW outlet matching pressure and flowsplit clinical meassurements.
 
 Sivascular's zeroD solver was chosen as a computationally cheap surrogate model that enables the efficient implementation of optimization algorithms. For this case the L-BFGS optimizer was selected obtaininga fast convergence
-with NRMSE <5%. Once the optimum BC parameters are calculated, uncertainty quantification was performed using the Sequential Monte Carlo technique. This produces 5% and 95% confidance intervals for each parameter.
+with NRMSE <5%. Once the optimum BC parameters are calculated, a stochastic calibration is performed using Sequential Monte Carlo technique. This produces 5% and 95% confidance intervals for each parameter.
 
 The workflow is divided into 3 different phases:
 1. Centerline extraction
 2. Boundary Condition optimization
-3. Uncertainty quantification
+3. SMC calibration
 
 ### 1. Centerline extraction
-Simvascular's default centerline extraction function works by finding the shortest path between the inlets and outlets. However this method fail to capture CoW's looped topology and some branches are left uncovered. Consequently a 
-custom centerline extraction function was developed. This function extracts individual centerlines from different inlet/outlet pairs using the VMTK library and posteriorly merges them into a unified centerline that captures the shape 
-of all the branches. 
+Simvascular's default centerline extraction function works by finding the shortest path between the inlets and outlets. However this method fails to capture CoW's looped topology and some branches are left uncovered. Consequently a 
+custom centerline extraction function was developed. This function extracts individual centerlines from different inlet/outlet pairs using the VMTK python library and posteriorly merges them into a unified centerline that captures the shape and position of all the branches. 
 Additionally this function identifies key points such as:
 - Inlets 
 - Outlets 
 - Junctions
-- Stenoses
+- Stenoses points
 
 ### 2. Boundary Condition Optimization
 The aim of the second phase is to calculate the optimum BC parameters that match the clinical meassurements by applying the L-BFGS algorithm to 0D surrogates. First of all, it is necessary to translate the centerline into a JSON file
@@ -55,9 +54,9 @@ pip install -r requirements.txt
 
 The script expects the standard SimVascular project structure. Ensure the following files are in the Models/ folder:
 
-* cow_model_coarse.vtp: A coarse remesh of your 3D model (recommended for faster centerline extraction).
+* cow_model_coarse.vtp: A lighter coarse remesh of your 3D model (recommended for faster centerline extraction).
 
-* cow_faceID.mdl: The model face mapping file.
+* cow_faceID.mdl: The model face mapping file that matches eahc caps name with a numeric ID.
   
 ### Input parameters:
 **Phase 1**
@@ -70,12 +69,12 @@ The script expects the standard SimVascular project structure. Ensure the follow
   - "ACA tolerance": Specific threshold for Anterior Cerebral Arteries to prevent branch collapse due to anatomical proximity.
   
   - "Spatial tolerance": Maximum distance that a point needs to be from the 3D model's cap to be identified as inlet/outlet.
-  - 
+  
 **Phase 2**
 * *inflow_filepath*: Path were the inlet flow documents are located. 4 files are expected in the folder, one for each CoW inlet: LICA.dat, RICA.dat, LVA.dat and RVA.dat. These files need to respect the structure suported from Simvascular,
-with 2 columns, the first one for the time steps and the second for the flow values un mL/s.
+with 2 columns, the first one for the time steps and the second for the flow values in mL/s.
 * *clinical_data_file*: A csv file that collects the clinical data from the patient.
-* 
+* *Viscosity*: Specific value of the viscosity of that patient.
 **Phase 3**
 * *num_particles*: Is the number of samples used in the Sequential Monte Carlo (SMC) process.
 * *num_cores*: The SMC process can be parallelized. This parameter defines the number of cores used.
@@ -83,7 +82,7 @@ with 2 columns, the first one for the time steps and the second for the flow val
 ### Observations
 Units: The pipeline assumes scales in mmgs (mm, g, s).
 
-The clinical_data_file (.csv) must follow the following structure (Pressure in mmHg, Flows in mL/s):
+The clinical_data_file (.csv) must follow the this exact column structure and naming convention (Pressure in mmHg, Flows in mL/s):
 
 | subject | HR   | SBP   | DBP  | R_ACA | L_ACA | R_MCA | L_MCA | R_PCA | L_PCA | R_SCA | L_SCA |
 |---------|------|-------|------|-------|-------|-------|-------|-------|-------|-------|-------|
