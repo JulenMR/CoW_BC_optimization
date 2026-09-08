@@ -17,25 +17,25 @@ def read_flow_file(path):
         }
     return {"t": [0.0, 1.0], "Q": [0.5, 0.5]}
 
-def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_value = 0.004, flow_files=None, rcr_values=None, tau = None):
+def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_val = 0.004, flow_files=None, rcr_values=None, tau = None):
 
     if not os.path.exists(vtp_path):
         print(f"Error: File not found at {vtp_path}")
         return
 
-    print(f"\n" + "="*55)
+    print(f"\n" + "="*65)
     print(f"POSTPROCESSING CENTERLINE: {os.path.basename(vtp_path)}")
-    print("="*55)
+    print("="*65)
 
     reader = vtk.vtkXMLPolyDataReader()
     reader.SetFileName(vtp_path)
     reader.Update()
     polydata = reader.GetOutput()
 
-    ### Phase 1: Extraction 
+    # PHASE 1: EXTRACTION 
     branch_ids = numpy_support.vtk_to_numpy(polydata.GetCellData().GetArray("BranchID"))
     usage_tags = numpy_support.vtk_to_numpy(polydata.GetPointData().GetArray("UsageTag"))
-    radii = numpy_support.vtk_to_numpy(polydata.GetPointData().GetArray("MaximumInscribedSphereRadius"))
+    radii = numpy_support.vtk_to_numpy(polydata.GetPointData().GetArray("modified_radius"))
 
     pos_to_node = {} 
     next_node_id = 0
@@ -48,52 +48,57 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_value = 0.004,
             next_node_id += 1
         return pos_to_node[key]
 
-    raw_branches = {} # Information about the branch
-    node_to_branches = defaultdict(list) # Information about the connectivity
+    raw_branches = {} 
+    node_to_branches = defaultdict(list) 
     inlet_nodes, outlet_nodes = set(), set()
 
-    for i in range(polydata.GetNumberOfCells()): # Iterate through each branch
+    for i in range(polydata.GetNumberOfCells()): 
         cell = polydata.GetCell(i)
         b_id = int(branch_ids[i])
-        pt_ids = [cell.GetPointId(j) for j in range(cell.GetNumberOfPoints())] # Get all the points
-        n_start, n_end = get_node(pt_ids[0]), get_node(pt_ids[-1]) # Select first and last point from the branch
+        pt_ids = [cell.GetPointId(j) for j in range(cell.GetNumberOfPoints())] 
+        n_start, n_end = get_node(pt_ids[0]), get_node(pt_ids[-1]) 
         raw_branches[b_id] = {'nodes': [n_start, n_end], 'pts': pt_ids, 'oriented': False} 
         node_to_branches[n_start].append(b_id)
         node_to_branches[n_end].append(b_id)
         for p_id in [pt_ids[0], pt_ids[-1]]:
             tag = int(usage_tags[p_id])
-            if tag == 1: inlet_nodes.add(get_node(p_id)) # Save inlets
-            elif tag == 2: outlet_nodes.add(get_node(p_id)) # Save outlets
+            if tag == 1: inlet_nodes.add(get_node(p_id)) 
+            elif tag == 2: outlet_nodes.add(get_node(p_id)) 
 
-    ### Phase 2: orientetion with Breadth First Search algorithm
+    # PHASE 2: ORIENTATION & DEBUGGING GEOMETRY
     final_segments = {}
-    queue = deque(list(inlet_nodes)) # The BFS starts with inlets in the queue
+    queue = deque(list(inlet_nodes)) 
+    
     while queue:
-        curr_node = queue.popleft() # Gets the first node from the queue
-        for b_id in node_to_branches[curr_node]: # Iterates for each branch connected to that node
+        curr_node = queue.popleft() 
+        for b_id in node_to_branches[curr_node]: 
             br = raw_branches[b_id]
-            if not br['oriented']: # If it has not been oriented already
-                n_in = curr_node # Takes the current node as inlet
-                n_out = br['nodes'][1] if br['nodes'][0] == curr_node else br['nodes'][0] # Takes the other node as outlet
+            if not br['oriented']: 
+                n_in = curr_node 
+                n_out = br['nodes'][1] if br['nodes'][0] == curr_node else br['nodes'][0] 
                 coords_pts = [np.array(polydata.GetPoint(p)) for p in br['pts']]
                 length = sum(np.linalg.norm(coords_pts[j+1] - coords_pts[j]) for j in range(len(coords_pts)-1)) 
-                final_segments[b_id] = { # Saves information for each  segment
-                    'n_in': n_in, 'n_out': n_out, 'length': float(length), # start/end node, radius, length 
-                    'radius': float(radii[br['pts'][0]]),
-                    'is_inlet': n_in in inlet_nodes, 'is_outlet': n_out in outlet_nodes # checks if the nodes are inlet or outlet
-                }
-                br['oriented'] = True # Sets that branch as oriented
-                queue.append(n_out) # Adds the outlet node to the queue
+                
+                branch_radii = radii[br['pts']]
+                r_hyd = float((np.mean(branch_radii**(-4)))**(-0.25)) # Harmonic radius mean for hydraulic resistance
 
-    ### Phase 3: JSON assembly
-    last_t = int(tau*1000)
+                final_segments[b_id] = { 
+                    'n_in': n_in, 'n_out': n_out, 'length': float(length), 
+                    'radius': r_hyd, 
+                    'is_inlet': n_in in inlet_nodes, 'is_outlet': n_out in outlet_nodes 
+                }
+                br['oriented'] = True 
+                queue.append(n_out) 
+
+    # PHASE 3: JSON ASSEMBLY & RESISTANCE DEBUG
+    last_t = int(tau*1000) if tau else 1000
     model_0d = {
         "simulation_parameters": {
             "number_of_cardiac_cycles": 10,
             "number_of_time_pts_per_cardiac_cycle": last_t,
             "time_step_size": 0.001,
             "output_all_cycles": False,
-            "density": 0.00106, "viscosity": viscosity_value,
+            "density": 0.00106, "viscosity": viscosity_val,
             "model_name": "Multi_Inlet_Model",
             "steady_initial": True,
             "sim_cycle_to_cycle_percent_error": 0.5,
@@ -102,37 +107,38 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_value = 0.004,
     }
 
     junction_data = defaultdict(lambda: {"in": [], "out": []})
-    E = 1e9 # Youngs modulus
-    h = 0.1 # wall thickness
-    for b_id, data in final_segments.items(): # Iterates every branch
+    E = 1e9 
+    h = 0.1 
+
+    for b_id, data in final_segments.items(): 
+        r_poiseuille = (8.0 * viscosity_val * data['length']) / (np.pi * data['radius']**4)
+        
+
         vessel = {
             "vessel_id": b_id, "vessel_name": f"branch{b_id}",
             "vessel_length": data['length'], "zero_d_element_type": "BloodVessel",
-            "zero_d_element_values": { # Applies Poiseuilles laws to get R, C, L
-                "R_poiseuille": (8.0 * viscosity_value * data['length']) / (np.pi * data['radius']**4), 
-                "L": 0, #(0.00106 * data['length']) / (np.pi * data['radius']**2),
+            "zero_d_element_values": { 
+                "R_poiseuille": r_poiseuille, 
+                "L": 0,
                 "C": (3.0 * data['length'] * np.pi * data['radius']**3) / (2 * E*h),
                 "stenosis_coefficient": 0.0
             },
             "boundary_conditions": {}
         }
 
-        if data['is_inlet']: # If the branch has an inlet sets INFLOW
+        if data['is_inlet']: 
             bc_name = f"INLET_{b_id}"
-            vessel["boundary_conditions"]["inlet"] = bc_name # Adds BC name to the specific vessel
-            
-            f_path = flow_files.get(b_id) if flow_files else None # Gets the flow file from the key (b_id) of the flow dictionary
+            vessel["boundary_conditions"]["inlet"] = bc_name 
+            f_path = flow_files.get(b_id) if flow_files else None 
             model_0d["boundary_conditions"].append({
                 "bc_name": bc_name, "bc_type": "FLOW", 
-                "bc_values": read_flow_file(f_path)
+                "bc_values": read_flow_file(f_path) if f_path else {}
             })
-            print(f"Inlet {b_id}: Assigned flow from {os.path.basename(f_path) if f_path else 'default'}")
         else:
-            junction_data[data['n_in']]["out"].append(b_id) # Saves the b_id as an end of its starting node
+            junction_data[data['n_in']]["out"].append(b_id) 
 
-        if data['is_outlet']: # If the branch has an outlet sets RCR
+        if data['is_outlet']: 
             bc_name = f"RCR_{b_id}"
-            print(f"Adding: {bc_name}")
             vessel["boundary_conditions"]["outlet"] = bc_name
             vals = rcr_values.get(b_id, [1000.0, 1e-6, 5000.0]) if rcr_values else [1000.0, 1e-6, 5000.0]
             model_0d["boundary_conditions"].append({
@@ -140,7 +146,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_value = 0.004,
                 "bc_values": {"Rp": vals[0], "C": vals[1], "Rd": vals[2], "Pd": 0.0}
             })
         else:
-            junction_data[data['n_out']]["in"].append(b_id) # Saves the b_id as a start of its ending node
+            junction_data[data['n_out']]["in"].append(b_id) 
 
         model_0d["vessels"].append(vessel)
 
@@ -153,7 +159,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_value = 0.004,
 
     with open(output_path, 'w') as f:
         json.dump(model_0d, f, indent=4)
-    print(f"\nCOMPLETED. Initial JSON saved: {output_path}")
+    print(f"\nCOMPLETED. Initial JSON saved: {output_path}\n" + "="*65)
     return final_segments, pos_to_node, inlet_nodes, outlet_nodes
 
 def visualize_graph(final_segments, pos_to_node, inlet_nodes, outlet_nodes, patient_num, save_path):
@@ -200,17 +206,18 @@ def visualize_graph(final_segments, pos_to_node, inlet_nodes, outlet_nodes, pati
 def get_clinical_data(file, p_number):
     pressure_data = pd.read_csv(file)
     row = pressure_data[pressure_data['subject'] == p_number]
-    
+    print(row)
     if row.empty:
         raise ValueError(f"Patient {p_number} not found")
     
     sbp = float(row['SBP'].values[0])
     dbp = float(row['DBP'].values[0])
+    viscosity = float(row['VISCOSITY'].values[0])
         
     map_pressure = (sbp + 2 * dbp) / 3 
     pulse_pressure = sbp - dbp
 
-    data = row.iloc[0, 4:].to_dict()
+    data = row.iloc[0, 5:].to_dict()
     flow_dict = {k.strip(): v*1000.0 for k, v in data.items()}      
     print(f"\nClinical data for PACS{p_number:03d}")
     print(f"Mean pressure: {map_pressure:.2f} mmHg")
@@ -225,6 +232,7 @@ def get_clinical_data(file, p_number):
     clinical_data = {
         "mean_p": map_pressure,
         "pulse": pulse_pressure,
+        "viscosity":viscosity,
         "flows": flow_dict,
     }
     
@@ -234,7 +242,7 @@ def get_clinical_data(file, p_number):
 def get_initial_BC(clinical_data_file, patient_number, mapping_dict, tau = 1.022):
     my_rcrs = {}
     clinical_data = get_clinical_data(file=clinical_data_file, p_number=patient_number)
-    p_mean, _, flow_dict = clinical_data["mean_p"], clinical_data["pulse"], clinical_data["flows"]
+    p_mean, p_pulse, viscosity, flow_dict = clinical_data["mean_p"], clinical_data["pulse"],clinical_data["viscosity"], clinical_data["flows"]
     for region_name, branch_id in mapping_dict.items():
         if region_name in flow_dict:
             q_mean = flow_dict[region_name]
@@ -260,7 +268,5 @@ def get_initial_BC(clinical_data_file, patient_number, mapping_dict, tau = 1.022
     for bid, values in sorted(my_rcrs.items()):
         print(f"{bid}: {values}")
 
-    return my_rcrs
+    return my_rcrs, viscosity
 
-
-                          
