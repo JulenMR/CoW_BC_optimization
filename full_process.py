@@ -187,8 +187,8 @@ if __name__ == "__main__":
     patient_number = 8
     sv_project_filepath = f"/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-{patient_number:03d}"
     merging_tolerances = {
-         "General tolerance": 0.006,
-         "ACA tolerance": 0.01,
+         "General tolerance": 0.011,
+         "ACA tolerance": 0.008,
          "Spatial tolerance": 2.0
     }
 

@@ -1,9 +1,8 @@
-import vtk
-from collections import defaultdict
-import numpy as np
-import pandas as pd
-from individual_centerline import get_face_center
 import os
+import vtk
+import numpy as np
+from collections import defaultdict
+from individual_centerline import get_face_center
 
 def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, output_file, face_mapping, spatial_tolerance=0.2):
     ### Phase 0: Get outlet points from each centerline
@@ -11,7 +10,8 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     for f in branch_files:
         if os.path.exists(f):
             reader = vtk.vtkXMLPolyDataReader()
-            reader.SetFileName(f); reader.Update()
+            reader.SetFileName(f)
+            reader.Update()
             poly_branch = reader.GetOutput()
             
             # Count how many cells are in contact
@@ -21,7 +21,7 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
                 for j in range(cell_ids.GetNumberOfIds()):
                     local_connectivity[cell_ids.GetId(j)] += 1
             
-            # Outlet are points that only touch 1 cell
+            # Outlets are points that only touch 1 cell
             for pid, count in local_connectivity.items():
                 if count == 1:
                     ending_nodes.append(poly_branch.GetPoint(pid))
@@ -34,24 +34,27 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     aca_files = [f for f in branch_files if "ACA" in os.path.basename(f)]
     not_aca_files = [f for f in branch_files if "ACA" not in os.path.basename(f)]
 
-        # Unify general branches
+    # Unify general branches
     append_general = vtk.vtkAppendPolyData()
     for f in [f for f in not_aca_files if f not in aca_files]:
         reader = vtk.vtkXMLPolyDataReader()
-        reader.SetFileName(f); reader.Update()
+        reader.SetFileName(f)
+        reader.Update()
         append_general.AddInputData(reader.GetOutput())
     append_general.Update()
-        # Clean with general tolerance
+
+    # Clean with general tolerance
     cleaner_general = vtk.vtkCleanPolyData()
     cleaner_general.SetInputData(append_general.GetOutput())
     cleaner_general.SetTolerance(tol_general)
     cleaner_general.Update()
 
-        # Now append ACA branches
+    # Append ACA branches
     append_acas = vtk.vtkAppendPolyData()
     for f in aca_files:
         reader = vtk.vtkXMLPolyDataReader()
-        reader.SetFileName(f); reader.Update()
+        reader.SetFileName(f)
+        reader.Update()
         append_acas.AddInputData(reader.GetOutput())
     append_acas.Update()
 
@@ -59,7 +62,8 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     final_append.AddInputData(cleaner_general.GetOutput())
     final_append.AddInputData(append_acas.GetOutput())
     final_append.Update()
-        # Use a finer tolerance for ACAs
+
+    # Use a finer tolerance for ACAs
     final_cleaner = vtk.vtkCleanPolyData()
     final_cleaner.SetInputData(final_append.GetOutput())
     final_cleaner.SetTolerance(tol_aca) 
@@ -68,44 +72,53 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     clean_poly = final_cleaner.GetOutput()
 
     existing_points = clean_poly.GetPoints()
-    point_data = clean_poly.GetPointData()
-    
     num_original_points = clean_poly.GetNumberOfPoints()
-    
-    # Manually adds ending nodes to the clean centerline
-    outlet_to_id = {}
-    points_to_connect = [] 
+
+    # Compute degree of every point in clean_poly BEFORE deciding outlet connections
+    clean_connectivity = defaultdict(int)
+    for c in range(clean_poly.GetNumberOfCells()):
+        cell_ids = clean_poly.GetCell(c).GetPointIds()
+        for j in range(cell_ids.GetNumberOfIds()):
+            clean_connectivity[cell_ids.GetId(j)] += 1
+
+    terminal_candidates = [i for i in range(num_original_points) if clean_connectivity[i] == 1]
+    if not terminal_candidates:
+        print("[WARNING] No terminal (degree==1) points found in clean_poly; "
+              "falling back to searching all points.")
+        terminal_candidates = list(range(num_original_points))
+
+    # --- CORRECCIÓN CRÍTICA (SNAPPING EN LUGAR DE INSERTAR NUEVAS LÍNEAS) ---
+    # En lugar de meter un punto nuevo y una vtkLine extra (que crea micro-anzuelos y deformaciones
+    # en forma de campana), desplazamos el nodo terminal de la centerline directamente a la tapa.
+    modified_terminals = set()
     
     for pt_orig in ending_nodes:
-        found = False
-        for i in range(num_original_points):
-            # Compares distance of each end node with each centerline point
+        min_dist = float('inf')
+        closest_idx = -1
+        
+        for i in terminal_candidates:
+            if i in modified_terminals:
+                continue
             pt_act = clean_poly.GetPoint(i)
             dist = ((pt_act[0] - pt_orig[0])**2 + (pt_act[1] - pt_orig[1])**2 + (pt_act[2] - pt_orig[2])**2)**0.5
-            
-            if dist < spatial_tolerance:
-                new_id = existing_points.InsertNextPoint(pt_orig)
-                outlet_to_id[pt_orig] = new_id
-                # If a point is inside threshold distance, it saves the tuple (ending node+close point)
-                points_to_connect.append((i, new_id))
-                # Saves all the array data
-                for k in range(point_data.GetNumberOfArrays()):
-                    arr = point_data.GetArray(k)
-                    if arr is not None:
-                        arr.InsertNextTuple(arr.GetTuple(i))
-                        
-                found = True
-                break
-        
-        if not found:
-            new_id = existing_points.InsertNextPoint(pt_orig)
-            outlet_to_id[pt_orig] = new_id
-            for k in range(point_data.GetNumberOfArrays()):
-                arr = point_data.GetArray(k)
-                if arr is not None:
-                    arr.InsertNextTuple(arr.GetTuple(0))
+            if dist < min_dist:
+                min_dist = dist
+                closest_idx = i
 
-    # Deletes duplicated segments
+        found = closest_idx != -1 and min_dist < spatial_tolerance
+
+        if found:
+            existing_points.SetPoint(closest_idx, pt_orig)
+            modified_terminals.add(closest_idx)
+        else:
+            print(f"[WARNING] Outlet {pt_orig} has no terminal match within "
+                  f"spatial_tolerance={spatial_tolerance} (closest dist={min_dist:.4f}). "
+                  f"Snapping closest terminal to avoid micro-segments.")
+            if closest_idx != -1:
+                existing_points.SetPoint(closest_idx, pt_orig)
+                modified_terminals.add(closest_idx)
+
+    # Reconstrucción limpia de celdas sin líneas adicionales artificiales
     unique_cells = vtk.vtkCellArray()
     existing_segments = set()
     for i in range(clean_poly.GetNumberOfCells()):
@@ -114,7 +127,8 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
         
         for j in range(n_ids - 1):
             p1, p2 = ids.GetId(j), ids.GetId(j+1)
-            if p1 == p2: continue  
+            if p1 == p2: 
+                continue  
 
             segment = tuple(sorted((p1, p2)))
             if segment not in existing_segments:
@@ -124,17 +138,6 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
                 line.GetPointIds().SetId(1, p2)
                 unique_cells.InsertNextCell(line)
 
-    # Creates new links to add the ending node to its closest point
-    for p_intern, p_cap in points_to_connect:
-        segment = tuple(sorted((p_intern, p_cap)))
-        if segment not in existing_segments:
-            existing_segments.add(segment)
-            line = vtk.vtkLine()
-            line.GetPointIds().SetId(0, p_intern)
-            line.GetPointIds().SetId(1, p_cap)
-            unique_cells.InsertNextCell(line)
-
-    # Reconstructs cell connections
     poly_unique = vtk.vtkPolyData()
     poly_unique.SetPoints(existing_points)
     poly_unique.SetLines(unique_cells)
@@ -156,7 +159,7 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
             p1, p2 = ids.GetId(j), ids.GetId(j+1)
             node_connectivity[p1] += 1
             node_connectivity[p2] += 1
-    # If a node has > 3 connections, it is a bifurcation
+
     bifurcations = {pid for pid, count in node_connectivity.items() if count >= 3}
 
     ### Phase 3: Segmentation
@@ -185,7 +188,6 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     reader_mesh.Update()
     mesh_orig = reader_mesh.GetOutput()
 
-    # Calculates the center for each cap in the original mesh
     target_centers = {}
     print("\nFace center coordinates")
     for name in MASTER_INFLOWS + MASTER_OUTFLOWS:
@@ -196,7 +198,6 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
                 target_centers[name] = np.array(c)
                 print(f"FACE {fid:<3} | {name:<3} : ({c[0]:.4f}, {c[1]:.4f}, {c[2]:.4f})")
 
-
     branch_ids_point = vtk.vtkIntArray()
     branch_ids_point.SetName("BranchID")
     branch_ids_point.SetNumberOfTuples(poly_prepared.GetNumberOfPoints())
@@ -205,7 +206,7 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
 
     internal_count = 0
     segments_by_id = defaultdict(list)
-    # Iterates through all branches, checks if the starting or ending node of the branch falls in the threshold of the caps center points
+
     for branch_pts in segmented_cells:
         p_start = np.array(poly_prepared.GetPoints().GetPoint(branch_pts[0]))
         p_end = np.array(poly_prepared.GetPoints().GetPoint(branch_pts[-1]))
@@ -216,7 +217,8 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
             if name in target_centers:
                 dist = min(np.linalg.norm(p_start - target_centers[name]), np.linalg.norm(p_end - target_centers[name]))
                 if dist < spatial_tolerance:
-                    assigned_id = idx; break
+                    assigned_id = idx
+                    break
         
         # Assign outflows
         if assigned_id is None:
@@ -224,17 +226,16 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
                 if name in target_centers:
                     dist = min(np.linalg.norm(p_start - target_centers[name]), np.linalg.norm(p_end - target_centers[name]))
                     if dist < spatial_tolerance:
-                        assigned_id = idx + ID_OFFSET_OUTFLOWS; break
+                        assigned_id = idx + ID_OFFSET_OUTFLOWS
+                        break
 
         # Assign intermediate point
         if assigned_id is None:
             assigned_id = internal_count + ID_OFFSET_INTERNAL
             internal_count += 1
 
-        # Save all points by ID
         segments_by_id[assigned_id].append(branch_pts)
 
-    # Merge all segments by ID
     final_cell_array = vtk.vtkCellArray()
     branch_ids_cell = vtk.vtkIntArray()
     branch_ids_cell.SetName("BranchID")
@@ -246,29 +247,34 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
         merged_path = list(sub_segments[0])
         unused_segments = sub_segments[1:]
         
-        # Finds the correct position of the segments and inverts them if necessary
         while unused_segments:
             progress = False
             for i, seg in enumerate(unused_segments):
                 if merged_path[-1] == seg[0]:
                     merged_path.extend(seg[1:])
-                    unused_segments.pop(i); progress = True; break
+                    unused_segments.pop(i)
+                    progress = True
+                    break
                 elif merged_path[0] == seg[-1]:
                     merged_path = seg[:-1] + merged_path
-                    unused_segments.pop(i); progress = True; break
+                    unused_segments.pop(i)
+                    progress = True
+                    break
                 elif merged_path[-1] == seg[-1]: 
                     merged_path.extend(reversed(seg[:-1]))
-                    unused_segments.pop(i); progress = True; break
+                    unused_segments.pop(i)
+                    progress = True
+                    break
                 elif merged_path[0] == seg[0]: 
                     merged_path = list(reversed(seg[1:])) + merged_path
-                    unused_segments.pop(i); progress = True; break
+                    unused_segments.pop(i)
+                    progress = True
+                    break
             
             if not progress:
-                # This means that segments with the same ID are physically disconnected
                 merged_path.extend(unused_segments[0])
                 unused_segments.pop(0)
 
-        # Create unique polyline
         poly_line = vtk.vtkPolyLine()
         poly_line.GetPointIds().SetNumberOfIds(len(merged_path))
         
@@ -284,7 +290,6 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
     final_net.SetPoints(poly_prepared.GetPoints())
     final_net.SetLines(final_cell_array)
     final_net.GetCellData().AddArray(branch_ids_cell)
-    # Add individual branch data
     final_net.GetPointData().PassData(poly_prepared.GetPointData())
     final_net.GetPointData().AddArray(branch_ids_point)
 
@@ -296,7 +301,7 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
         node_type_array.SetTuple1(i, node_connectivity[i])
     final_net.GetPointData().AddArray(node_type_array)
 
-    # Crete UsageTag field
+    # Create UsageTag field
     usage_tags = vtk.vtkIntArray()
     usage_tags.SetName("UsageTag")
     in_centers = [target_centers[n] for n in MASTER_INFLOWS if n in target_centers]
@@ -308,10 +313,14 @@ def centerline_merging(branch_files, tol_general, tol_aca, input_model_file, out
         tag = 0
         if ntype == 1:
             for c in in_centers:
-                if np.linalg.norm(p - c) < 5: tag = 1; break
+                if np.linalg.norm(p - c) < 5: 
+                    tag = 1
+                    break
             if tag == 0:
                 for c in out_centers:
-                    if np.linalg.norm(p - c) < 5: tag = 2; break
+                    if np.linalg.norm(p - c) < 5: 
+                        tag = 2
+                        break
         elif ntype > 2:
             tag = 3
         usage_tags.InsertNextValue(tag)
