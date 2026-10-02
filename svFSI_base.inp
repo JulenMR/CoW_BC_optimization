@@ -27,39 +27,51 @@ Add mesh: cow{
    Add face: wall {
       Face file path: mesh-complete/walls_combined.vtp
    }
+
    Add face: R_ICA {
       Face file path: mesh-complete/mesh-surfaces/cap_R_ICA.vtp
    }
+
    Add face: L_ICA{
       Face file path: mesh-complete/mesh-surfaces/cap_L_ICA.vtp
    }
+
    Add face: R_VA {
       Face file path: mesh-complete/mesh-surfaces/cap_R_VA.vtp
    }
+
    Add face: L_VA {
       Face file path: mesh-complete/mesh-surfaces/cap_L_VA.vtp
    }
+
    Add face: L_ACA {
       Face file path: mesh-complete/mesh-surfaces/cap_L_ACA.vtp
    }
+
    Add face: L_MCA {
       Face file path: mesh-complete/mesh-surfaces/cap_L_MCA.vtp
    }
+
    Add face: L_PCA {
       Face file path: mesh-complete/mesh-surfaces/cap_L_PCA.vtp
    }
+
    Add face: R_PCA {
       Face file path: mesh-complete/mesh-surfaces/cap_R_PCA.vtp
    }
+
    Add face: L_SCA {
       Face file path: mesh-complete/mesh-surfaces/cap_L_SCA.vtp
    }
+
    Add face: R_ACA {
       Face file path: mesh-complete/mesh-surfaces/cap_R_ACA.vtp
    }
+
    Add face: R_MCA {
       Face file path: mesh-complete/mesh-surfaces/cap_R_MCA.vtp
    }
+
    Add face: R_SCA {
       Face file path: mesh-complete/mesh-surfaces/cap_R_SCA.vtp
    }
@@ -100,7 +112,7 @@ Add equation: fluid {
       Value: 0.0
    }
 
-  Add BC: R_ICA {
+   Add BC: R_ICA {
       Type: Dir
       Time dependence: Unsteady
       Temporal values file path: RICA_3d_smooth.dat
@@ -135,56 +147,56 @@ Add equation: fluid {
    Add BC: L_ACA {
      Type: Neumann
      Time dependence: RCR
-RCR values: (1.1848, 0.08319071, 7.6677)
+     RCR values: (1.1848, 0.08319071, 7.6677)
      Distal pressure: 0.0
    }
 
    Add BC: L_MCA {
      Type: Neumann
      Time dependence: RCR
-RCR values: (0.5205826, 0.027051, 3.6272)
+     RCR values: (0.5205826, 0.027051, 3.6272)
      Distal pressure: 0.0
    }
 
    Add BC: L_PCA {
      Type: Neumann
      Time dependence: RCR
-RCR values: (2.7307, 0.03776, 18.990)
+     RCR values: (2.7307, 0.03776, 18.990)
      Distal pressure: 0.0
    }
 
    Add BC: R_PCA {
      Type: Neumann
      Time dependence: RCR
-RCR values: (3.282066, 0.0329291, 23.582861)
+     RCR values: (3.282066, 0.0329291, 23.582861)
      Distal pressure: 0.0
    }
 
    Add BC: L_SCA {
      Type: Neumann
      Time dependence: RCR
-RCR values: (5.1361307, 0.021063038, 39.60646)
+     RCR values: (5.1361307, 0.021063038, 39.60646)
      Distal pressure: 0.0
    }
 
    Add BC: R_ACA {
      Type: Neumann
      Time dependence: RCR
-RCR values: (1.2751, 0.068376, 8.48798)
+     RCR values: (1.2751, 0.068376, 8.48798)
      Distal pressure: 0.0
    }
 
    Add BC: R_MCA {
      Type: Neumann
      Time dependence: RCR
-RCR values: (0.564628, 0.02401, 3.85525)
+     RCR values: (0.564628, 0.02401, 3.85525)
      Distal pressure: 0.0
    }
 
    Add BC: R_SCA {
      Type: Neumann
      Time dependence: RCR
-RCR values: (5.3400, 0.020288, 41.36877)
+     RCR values: (5.3400, 0.020288, 41.36877)
      Distal pressure: 0.0
    }
 }

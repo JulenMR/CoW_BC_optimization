@@ -59,7 +59,7 @@ def centerline_extraction(sv_project_filepath, merging_tolerances, custom_cap_se
     centerline_merging(branch_files=branch_files, input_model_file=input_file, output_file=final_centerline_file,
                         face_mapping = face_mapping, tol_general=general_tolerance, tol_aca = aca_tolerance, spatial_tolerance=spatial_tolerance)
     
-def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clinical_data_csv, viscosity_value = 0.004, visualize = False):
+def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clinical_data_csv, visualize = False):
 
     bc_optimization_file = os.path.join(sv_project_filepath, "ROMSimulations", "bc_optimization")
     if not os.path.exists(bc_optimization_file):
@@ -85,7 +85,7 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
     tau_param = np.round(flow_data[-1, 0],3)
     print(tau_param)
 
-    my_rcrs,viscosity_val = get_initial_BC(clinical_data_file=clinical_data_csv, patient_number=patient_number, 
+    my_rcrs, viscosity_value = get_initial_BC(clinical_data_file=clinical_data_csv, patient_number=patient_number, 
                              mapping_dict=mapping_dict, tau=tau_param)    
     my_flows = {
         0: carotid_left_flow,
@@ -94,7 +94,7 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
         3: vertebral_right_flow
     }
     segments, pos_to_node, inlet_nodes, outlet_nodes = generate_0d_json_multi_inlet(vtp_path= final_centerline_file, output_path = initial_json_file, 
-                                                                                    viscosity_val = viscosity_val, flow_files=my_flows, rcr_values=my_rcrs, tau=tau_param)
+                                                                                    viscosity_val = viscosity_value, flow_files=my_flows, rcr_values=my_rcrs, tau=tau_param)
     if visualize == True:
          save_path = os.path.join(sv_project_filepath, "ROMSimulations", "Centerlines", f"graph_{patient_number:03d}.png")
          visualize_graph(final_segments= segments, pos_to_node = pos_to_node, inlet_nodes = inlet_nodes, outlet_nodes = outlet_nodes, 
@@ -109,7 +109,7 @@ def bc_optimization(patient_number, sv_project_filepath, inflows_filepath, clini
     print(f"\nOptimization finalized. JSON File saved in {optimized_json}")
 
     inp_optimized_path = os.path.join(opt_3D_simulation_file, "svFSI_optimized.inp")
-    update_svfsi(json_path=optimized_json, inp_path="svFSI_base.inp", save_path = inp_optimized_path, mapping_dict=mapping_dict, timestep_size=tau_param)
+    update_svfsi(json_path=optimized_json, inp_path="svFSI_base.inp", save_path = inp_optimized_path, viscosity_value=viscosity_value, mapping_dict=mapping_dict, timestep_size=tau_param)
 
 def SMC_calibration(sv_project_filepath, patient_number, clinical_data_file, num_particles, error_tolerance, visualize= False):
 
@@ -195,31 +195,6 @@ if __name__ == "__main__":
          "Spatial tolerance": 2.5
     }
 
-    # For PACS011
-    objective_branches = [
-        ("cap_L_ICA", "cap_L_MCA"),
-        ("cap_R_ICA", "cap_R_MCA"),
-        ("cap_L_SCA", "cap_L_MCA"),
-        ("cap_R_SCA", "cap_L_SCA"),
-        ("cap_L_VA", "cap_R_PCA"),
-        ("cap_R_VA", "cap_L_PCA"),
-        ("cap_L_MCA", "cap_R_MCA"),
-        ("cap_L_ACA", "cap_R_ACA")
-    ]
-    # for PACS001
-    objective_branches = [
-            ("cap_L_ICA", "cap_L_MCA"),
-            ("cap_R_ICA", "cap_R_MCA"),
-            ("cap_L_SCA", "cap_L_MCA"),
-            ("cap_R_SCA", "cap_R_MCA"),
-            ("cap_L_VA", "cap_R_PCA"),
-            ("cap_R_VA", "cap_L_PCA"),
-            ("cap_L_MCA", "cap_R_MCA"),
-            ("cap_L_ACA", "cap_R_ACA"),
-            ("cap_L_MCA", "cap_L_ACA"),
-            ("cap_R_MCA", "cap_R_ACA")
-    ]
-
     # For PACS001-slicer
     objective_branches = [
             ("cap_L_ICA", "cap_L_MCA"),
@@ -240,20 +215,18 @@ if __name__ == "__main__":
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/subject_targets.csv"
     clinical_data_file = "/home/julenmr/Documents/CMU/Automatic_BC/Synthetic_data/Patient_models/pacs-scd-001_slicer/subject_targets.csv"
 
-    viscosity_value=0.0035
-
     # Phase 3
     num_particles = 5000
     err_tolerance = 0.05
     ########################################################################################
     ### Functions
     # Phase 1
-    # centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, 
-    #                       custom_cap_setting= objective_branches, extract_individual_centerlines = False)
+    centerline_extraction(sv_project_filepath = sv_project_filepath, merging_tolerances = merging_tolerances, 
+                          custom_cap_setting= objective_branches, extract_individual_centerlines = False)
 
     # Phase 2
     bc_optimization(patient_number = patient_number, sv_project_filepath = sv_project_filepath, inflows_filepath = inflow_filepath, 
-                    viscosity_value=viscosity_value, clinical_data_csv = clinical_data_file, visualize=False)
+                    clinical_data_csv = clinical_data_file, visualize=False)
 
     # Phase 3
     # SMC_calibration(sv_project_filepath = sv_project_filepath, patient_number = patient_number, clinical_data_file = clinical_data_file, 
