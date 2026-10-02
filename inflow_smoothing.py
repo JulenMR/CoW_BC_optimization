@@ -23,7 +23,7 @@ def smooth_inflow(original_flow_file, optimization_file, threeDsim_file):
             timestep_size = data[-1,0]
             sort_idx = np.argsort(data[:, 0])
             time_pts = data[sort_idx, 0]
-            flow_pts = np.abs(data[sort_idx, 1])
+            flow_pts = np.abs(data[sort_idx, 1]*1000)
 
             t_last2, t_last = time_pts[-2], time_pts[-1]
             f_last2, f_last = flow_pts[-2], flow_pts[-1]

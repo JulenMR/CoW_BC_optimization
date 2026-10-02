@@ -35,7 +35,7 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_val = 0.004, f
     # PHASE 1: EXTRACTION 
     branch_ids = numpy_support.vtk_to_numpy(polydata.GetCellData().GetArray("BranchID"))
     usage_tags = numpy_support.vtk_to_numpy(polydata.GetPointData().GetArray("UsageTag"))
-    radii = numpy_support.vtk_to_numpy(polydata.GetPointData().GetArray("modified_radius"))
+    radii = numpy_support.vtk_to_numpy(polydata.GetPointData().GetArray("MaximumInscribedSphereRadius"))
 
     pos_to_node = {} 
     next_node_id = 0
@@ -112,7 +112,6 @@ def generate_0d_json_multi_inlet(vtp_path, output_path, viscosity_val = 0.004, f
 
     for b_id, data in final_segments.items(): 
         r_poiseuille = (8.0 * viscosity_val * data['length']) / (np.pi * data['radius']**4)
-        
 
         vessel = {
             "vessel_id": b_id, "vessel_name": f"branch{b_id}",

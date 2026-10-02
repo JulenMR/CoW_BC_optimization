@@ -146,7 +146,7 @@ def run_optimization(json_path, target_clinical_data, BRANCH_MAP):
     
     base_params = []
     active_rcr_ids = []
-    for i in range(4, 12):
+    for i in range(4, 20):
         bc_list = json_dict["boundary_conditions"]
         branch_count = 0
         try:
