@@ -46,11 +46,12 @@ git checkout multiple_outlet
 ``` 
 2. Create virtual environment with VMTK library
 ```bash
-conda create -n cow_pipeline_env -c vmtk vmtk python=3.10
+conda create -n cow_pipeline_env -c conda-forge vmtk python=3.10
 conda activate cow_pipeline_env
 ```
-3. Install dependencies with pip:
+3. Install Simvascular 0D solver and additional dependencies with pip:
 ```bash
+pip install git+https://github.com/SimVascular/svZeroDSolver.git
 pip install -r requirements.txt
 ```
 
@@ -76,7 +77,7 @@ The script expects the standard SimVascular project structure. Ensure the follow
   - "ACA tolerance": Specific threshold for Anterior Cerebral Arteries to prevent branch collapse due to anatomical proximity.
   
   - "Spatial tolerance": Maximum distance that a point needs to be from the 3D model's cap to be identified as inlet/outlet.
-
+  There is a boolean parameter in the *centerline_extraction* function which is called "extract_individual_centerlines". Once the individual centerlines are extracted it is recommended tose this parameter to false so that the individual centerlines are not being extracted every time while the merging tolerances are being asjusted. 
 It is recommended to verify if the obtained "final_centerline.vtp" object correctly captures the model's geometry and if inlets, outlets and junctions are detected successfully. To so so, you can check the "UsageTag" field in paraview.  If the obtained fenterline is not correct, the BC optimization phase will fail.
 
 
