@@ -76,7 +76,9 @@ objective_branches = [("cap_L_ICA", "cap_L_MCA"), ("cap_R_ICA", "cap_R_MCA")]
   - "Spatial tolerance": Maximum distance that a point needs to be from the 3D model's cap to be identified as inlet/outlet.
 
 It is recommended to verify if the obtained "final_centerline.vtp" object correctly captures the model's geometry and if inlets, outlets and junctions are detected successfully. To so so, you can check the "Usage_Tag" field in paraview.  If the obtained fenterline is not correct, the BC optimization phase will fail.
-  <img width="640" height="801" alt="image" src="https://github.com/user-attachments/assets/19a6fbde-0893-435c-9ea9-7f441ab65147" />
+
+
+<img width="640" height="801" alt="image" src="https://github.com/user-attachments/assets/19a6fbde-0893-435c-9ea9-7f441ab65147" />
 
 **Phase 2**
 * *inflow_filepath*: Path were the inlet flow documents are located. 4 files are expected in the folder, one for each CoW inlet: LICA.dat, RICA.dat, LVA.dat and RVA.dat. These files need to respect the structure suported from Simvascular,
