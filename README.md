@@ -49,8 +49,9 @@ git checkout multiple_outlet
 conda create -n cow_pipeline_env -c conda-forge vmtk python=3.10
 conda activate cow_pipeline_env
 ```
-3. Install dependencies with pip:
+3. Install Simvascular 0D solver and additional dependencies with pip:
 ```bash
+pip install git+https://github.com/SimVascular/svZeroDSolver.git
 pip install -r requirements.txt
 ```
 
