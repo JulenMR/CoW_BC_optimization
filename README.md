@@ -66,7 +66,9 @@ The script expects the standard SimVascular project structure. Ensure the follow
 * *patient number*: Corresponds to the ID number that identifies the patient
 * *sv_project_filepath*: The filepath to the Simvascular project root.
 * *objective_branches*: This pipeline builds the CoW's global centerline by merging a set of individual centerlines connecting different inlet/outlet combinations. If this input parameter is set to "None" there is a default combination of outlets that captures the geometry of a standard CoW. However, considering CoW's geometrical variability, the option of defining a custom list is allowed for the user. The list has to include a tuple of outlets to generate each individual centerline.
+  
 objective_branches = [("cap_L_ICA", "cap_L_MCA"), ("cap_R_ICA", "cap_R_MCA")]
+
 * *merging_tolerances*: It is a dictionary that includes 3 tolerance values that the vtk.vtkCleanPolyData() function from the centerline merging phase needs. They specifiy (in mm) the distance threshold to merge 2 close points into one.
 
   - "General tolerance": Distance threshold to merge two points into one node.
