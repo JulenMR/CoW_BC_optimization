@@ -46,7 +46,7 @@ git checkout multiple_outlet
 ``` 
 2. Create virtual environment with VMTK library
 ```bash
-conda create -n cow_pipeline_env -c vmtk vmtk python=3.10
+conda create -n cow_pipeline_env -c conda-forge vmtk python=3.10
 conda activate cow_pipeline_env
 ```
 3. Install dependencies with pip:
